@@ -1,5 +1,28 @@
-var https = require("https");
 var fs = require("fs");
+var AzureMgt = require("./azure-management");
+require("uuid");
+return;
+
+var azureMgt = new AzureMgt(
+                        fs.readFileSync("./elvis.publishsettings", "ascii"),
+                        fs.readFileSync("./certificates/master.cer", "ascii"),
+                        fs.readFileSync("./certificates/ca.key", "ascii")
+                );
+
+
+azureMgt.getHostedServices(function (services) {
+    azureMgt.getDeployment(services[0], "production", function (deployment) {
+        console.log(deployment);
+    });
+});
+
+
+
+
+
+
+
+/*
 var request = require("request");
 var xml2js = require('xml2js');
 
@@ -27,3 +50,4 @@ function parseXml(data, callback) {
 }
 
 return;
+*/
