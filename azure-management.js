@@ -151,7 +151,7 @@ module.exports = function (publishSettings, certificate, privateKey) {
   <Configuration>:2</Configuration>\
   <StartDeployment>true</StartDeployment>\
   <TreatWarningsAsError>false</TreatWarningsAsError>\
-</CreateDeployment>', packageUrl, new Buffer(configFile, "utf8").toString("base64"), new Buffer(uuid(), "utf8").toString("base64"), uuid());
+</CreateDeployment>', packageUrl, new Buffer(uuid(), "utf8").toString("base64"), new Buffer(configFile, "utf8").toString("base64"), uuid());
             
             var url = format("/services/hostedservices/:0/deploymentslots/:1", service, slot);
             
