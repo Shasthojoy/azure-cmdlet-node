@@ -85,7 +85,7 @@ module.exports = function (publishSettings, certificate, privateKey) {
             var url = format("/services/hostedservices/:0/deploymentslots/:1", service, slot);
         
             doAzureRequest(url, "2011-10-01", null, function(err, resp) {
-                if (resp.Code === "ResourceNotFound") {
+                if (!resp || resp.Code === "ResourceNotFound") {
                     callback(null);
                 }
                 else {
@@ -134,8 +134,8 @@ module.exports = function (publishSettings, certificate, privateKey) {
             // @todo: read instance count from deployment
             
             var configFile = format('<?xml version="1.0"?>\
-<ServiceConfiguration xmlns:xsi=http://www.w3.org/2001/XMLSchema-instance" xmlns:xsd="http://www.w3.org/2001/XMLSchema"\
-    serviceName=":0 osFamily="1" osVersion=*" xmlns=http://schemas.microsoft.com/ServiceHosting/2008/10/ServiceConfiguration">\
+<ServiceConfiguration xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:xsd="http://www.w3.org/2001/XMLSchema"\
+    serviceName=":0" osFamily="1" osVersion="*" xmlns="http://schemas.microsoft.com/ServiceHosting/2008/10/ServiceConfiguration">\
   <Role name="WebRole1">\
     <ConfigurationSettings />\
     <Instances count="1" />\
@@ -143,8 +143,8 @@ module.exports = function (publishSettings, certificate, privateKey) {
   </Role>\
 </ServiceConfiguration>', service);
             
-            var data = format('<?xml version="1.0 encoding="utf-8"?>\
-<CreateDeployment xmlns=http://schemas.microsoft.com/windowsazure>\
+            var data = format('<?xml version="1.0" encoding="utf-8"?>\
+<CreateDeployment xmlns="http://schemas.microsoft.com/windowsazure">\
   <Name>:3</Name>\
   <PackageUrl>:0</PackageUrl>\
   <Label>:1</Label>\
@@ -152,6 +152,8 @@ module.exports = function (publishSettings, certificate, privateKey) {
   <StartDeployment>true</StartDeployment>\
   <TreatWarningsAsError>false</TreatWarningsAsError>\
 </CreateDeployment>', packageUrl, new Buffer(uuid(), "utf8").toString("base64"), new Buffer(configFile, "utf8").toString("base64"), uuid());
+            
+            console.log("deployment", data);
             
             var url = format("/services/hostedservices/:0/deploymentslots/:1", service, slot);
             
