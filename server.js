@@ -1,7 +1,9 @@
 var fs = require("fs");
+var azure = require("azure-sdk-for-node");
+var uuid = require("node-uuid");
+var path = require("path");
 var AzureMgt = require("./azure-management");
-require("uuid");
-return;
+var packager = require("./azure-packager-node")
 
 var azureMgt = new AzureMgt(
                         fs.readFileSync("./elvis.publishsettings", "ascii"),
@@ -9,45 +11,89 @@ var azureMgt = new AzureMgt(
                         fs.readFileSync("./certificates/ca.key", "ascii")
                 );
 
-
-azureMgt.getHostedServices(function (services) {
-    azureMgt.getDeployment(services[0], "production", function (deployment) {
-        console.log(deployment);
+packager("./my-application", "./build_temp/" + uuid.v4(), function (file) {
+    console.log("packaged @ " + file);
+    
+    uploadPackage(file, function (pkg) {
+        console.log("package uploaded", pkg);
+        
+        fs.unlink(file, function () {
+            console.log("package removed from filesystem");
+        });
+        
+        publishPackage(pkg, function (err) {
+            if (err) {
+                console.log("publish error", err);
+            }
+            else {
+                console.log("publish succeeded");
+            }
+        });
     });
 });
 
+/* === Helper functions === */
 
-
-
-
-
-
-/*
-var request = require("request");
-var xml2js = require('xml2js');
-
-request({
-    url: "https://management.core.windows.net/9345d853-bcb4-49cb-980c-48aaca5cdc19/services/hostedservices",
-    headers: {
-        "x-ms-version": "2011-10-01"
-    },
-    cert: fs.readFileSync("./certificates/master.cer", "ascii"),
-    key: fs.readFileSync("./certificates/ca.key", "ascii")
-}, function (err, resp, body) {
-    parseXml(body, function (obj) {
-        console.log(obj);
+/**
+ * Publish a .cspkg
+ */
+function publishPackage(pkg, callback) {
+    azureMgt.getHostedServices(function (services) {
+        console.log("starting deployment for " + services[0]);
+        
+        azureMgt.createUpdateDeployment(services[0], "production", pkg, function (err, deplId) {
+            console.log("deployment started with id " + deplId);
+            
+            var checkStatus = function () {
+                azureMgt.getStatus(deplId, function (err, finished) {
+                    if (!err && finished) {
+                        callback(null);
+                    }
+                    else if (err) {
+                        callback(err);
+                    }
+                    else {
+                        setTimeout(checkStatus, 1000);
+                    }
+                });
+            };
+            
+            setTimeout(checkStatus, 1000);
+            
+        });
     });
-});
-
-function parseXml(data, callback) {
-    var parser = new xml2js.Parser();
-    
-    parser.on('end', function(result) {
-        callback(result);
-    });
-    
-    parser.parseString(data);
 }
-
-return;
-*/
+/**
+ * Upload a .cspkg file to Windows Azure Blob Storage
+ */
+function uploadPackage(file, callback) {
+    azureMgt.getStorageServices(function (svc) {
+        var name = svc[0].ServiceName;
+        console.log("using storage service", name);
+        azureMgt.getStorageCredentials(name, function (primaryKey) {
+            
+            var blobService = azure.createBlobService(name, primaryKey);
+            blobService.createContainerIfNotExists('c9deploys', { publicAccessLevel : 'blob' }, function (err) {
+                if (err) {
+                    console.log("BlobService error", err);
+                    return;
+                }
+                
+                console.log("created container c9deploys");
+                                
+                var blobname = uuid.v4() + ".cspkg";
+                console.log("preparing for upload '" + file + "' under blobname '" + blobname + "'");
+                
+                blobService.createBlockBlobFromFile("c9deploys", blobname, file, 11, function (err) {
+                    if (err) {
+                        console.log("BlobService error", err);
+                        return;
+                    }
+                    
+                    callback("http://" + name + ".blob.core.windows.net/c9deploys/" + blobname);
+                });
+            });
+            
+        });
+    });
+}

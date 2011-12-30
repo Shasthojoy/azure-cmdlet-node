@@ -36,11 +36,30 @@ module.exports = function (publishSettings, certificate, privateKey) {
                     cert: certificate,
                     key: privateKey
                 }, function (err, resp, body) {
-                    if (err) callback(err);
+                    if (resp.statusCode >= 300 && resp.statusCode < 600) {
+                        console.log("Response didn't have status in 200 range", url, resp.statusCode, body);
+                        
+                        err = {
+                            msg: "Expected resp.statusCode between 200 and 299",
+                            resp: resp,
+                            body: body
+                        };
+                    }
+
+                    if (err) { 
+                        callback(err);
+                        return;
+                    }
                     
-                    parseXml(body, function (obj) {
-                        callback(err, obj);
-                    });
+                    if (body) {
+                        parseXml(body, function(obj) {
+                            obj.RequestId = resp.headers["x-ms-request-id"];
+                            callback(err, obj);
+                        });
+                    }
+                    else {
+                        callback(err, { RequestId: resp.headers["x-ms-request-id"] });
+                    }
                 });
             });
         }
@@ -84,6 +103,37 @@ module.exports = function (publishSettings, certificate, privateKey) {
             // @todo: read instance count from deployment
             
             var configFile = format('<?xml version="1.0"?>\
+<ServiceConfiguration xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:xsd="http://www.w3.org/2001/XMLSchema"\
+    serviceName=":0" osFamily="1" osVersion="*" xmlns="http://schemas.microsoft.com/ServiceHosting/2008/10/ServiceConfiguration">\
+  <Role name="WebRole1">\
+    <ConfigurationSettings />\
+    <Instances count="1" />\
+    <Certificates />\
+  </Role>\
+</ServiceConfiguration>', service);
+            
+            var data = format('<?xml version="1.0" encoding="utf-8"?>\
+<UpgradeDeployment xmlns="http://schemas.microsoft.com/windowsazure">\
+   <Mode>auto</Mode>\
+   <PackageUrl>:0</PackageUrl>\
+   <Configuration>:1</Configuration>\
+   <Label>:2</Label>\
+</UpgradeDeployment>', packageUrl, new Buffer(configFile, "utf8").toString("base64"), new Buffer(uuid(), "utf8").toString("base64"));
+            
+            var url = format("/services/hostedservices/:0/deploymentslots/:1/?comp=upgrade", service, slot);
+            
+            doAzureRequest(url, "2009-10-01", data, function (err, depl) {
+                callback(err, depl ? depl.RequestId : 0);
+            });
+        }
+        
+        /**
+         * Do a rolling upgrade of an already existing deployment
+         */
+        function createDeployment(service, slot, packageUrl, callback) {
+            // @todo: read instance count from deployment
+            
+            var configFile = format('<?xml version="1.0"?>\
 <ServiceConfiguration xmlns:xsi=http://www.w3.org/2001/XMLSchema-instance" xmlns:xsd="http://www.w3.org/2001/XMLSchema"\
     serviceName=":0 osFamily="1" osVersion=*" xmlns=http://schemas.microsoft.com/ServiceHosting/2008/10/ServiceConfiguration">\
   <Role name="WebRole1">\
@@ -94,14 +144,20 @@ module.exports = function (publishSettings, certificate, privateKey) {
 </ServiceConfiguration>', service);
             
             var data = format('<?xml version="1.0 encoding="utf-8"?>\
-<UpgradeDeployment xmlns=http://schemas.microsoft.com/windowsazure>\
-   <Mode>auto</Mode>\
-   <PackageUrl>:0</PackageUrl>\
-   <Configuration>:1</Configuration>\
-   <Label>:2</Label>\
-</UpgradeDeployment>', packageUrl, new Buffer(configFile, "utf8").toString("base64"), 
+<CreateDeployment xmlns=http://schemas.microsoft.com/windowsazure>\
+  <Name>:3</Name>\
+  <PackageUrl>:0</PackageUrl>\
+  <Label>:1</Label>\
+  <Configuration>:2</Configuration>\
+  <StartDeployment>true</StartDeployment>\
+  <TreatWarningsAsError>false</TreatWarningsAsError>\
+</CreateDeployment>', packageUrl, new Buffer(configFile, "utf8").toString("base64"), new Buffer(uuid(), "utf8").toString("base64"), uuid());
             
+            var url = format("/services/hostedservices/:0/deploymentslots/:1", service, slot);
             
+            doAzureRequest(url, "2011-08-01", data, function (err, depl) {
+                callback(err, depl ? depl.RequestId : 0);
+            });
         }
         
         /**
@@ -118,8 +174,67 @@ module.exports = function (publishSettings, certificate, privateKey) {
             });
         }
         
+        /**
+         * All Azure async requests have a request id. Use this one to query for completion.
+         * If the callback contains 'true', the command succeeded, on 'false' it's still busy.
+         * Check the err parameter for any errors.
+         */
+        function getStatus(requestId, callback) {
+            var url = format("/operations/:0", requestId);
+            
+            doAzureRequest(url, "2011-10-01", null, function (err, operation) {
+                if (err) {
+                    callback(err, true);
+                    return;
+                }
+                
+                switch (operation.Status) {
+                    case "Succeeded":
+                        callback(null, true);
+                        break;
+                    case "InProgress":
+                        callback(null, false);
+                        break;
+                    default:
+                        callback(operation, true);
+                        break;
+                }
+            });
+        }
+        
+        /**
+         * Retrieve a list of all storage services
+         * Returns an error containing ServiceName and Url of the accounts
+         */
+        function getStorageServices(callback) {
+            doAzureRequest("/services/storageservices", "2011-10-01", null, function (err, data) {
+                var services = data.StorageService;
+                
+                if (!data.StorageService instanceof Array) {
+                    services = [ services ];
+                }
+                
+                callback(services);
+            });
+        }
+        
+        /**
+         * Retrieve a storage key for an account
+         */
+        function getStorageCredentials(account, callback) {
+            var url = format("/services/storageservices/:0/keys", account);
+            
+            doAzureRequest(url, "2011-10-01", null, function (err, data) {
+                callback(data.StorageServiceKeys.Primary, data.StorageServiceKeys.Secondary);
+            });            
+        }
+        
         return {
-            getHostedServices: getHostedServices
+            getHostedServices: getHostedServices,
+            createUpdateDeployment: createUpdateDeployment,
+            getStatus: getStatus,
+            getStorageServices: getStorageServices,
+            getStorageCredentials: getStorageCredentials
         };
        
     }());
@@ -171,6 +286,14 @@ function parseXml(data, callback) {
     });
     
     parser.parseString(data);
+}
+
+function uuid() {
+    var S4 = function() {
+        return (((1+Math.random())*0x10000)|0).toString(16).substring(1);
+    };
+    
+    return (S4()+S4()+"-"+S4()+"-"+S4()+"-"+S4()+"-"+S4()+S4()+S4());
 }
 
 /*
