@@ -1,5 +1,7 @@
-apps/**
-build_temp/**
-certificates/
-node_modules/**
+apps/*
+build_temp/*
+!build_temp/placeholder
+certificates/*
+!certificates/placeholder
+node_modules/*
 .DS_Store*
