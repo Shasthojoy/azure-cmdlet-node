@@ -67,8 +67,7 @@ module.exports = function (publishSettings, certificate, privateKey) {
         }
 
         function createCert(callback) {
-            var cmds='mkdir certificates &&\
-openssl genrsa -out ./certificates/ca.key 2048 &&\
+            var cmds='openssl genrsa -out ./certificates/ca.key 2048 &&\
 openssl req -new -x509 -days 1001 -key ./certificates/ca.key -out ./certificates/master.cer -batch &&\
 openssl x509 -in ./certificates/master.cer -outform DER -out ./certificates/master-der.cer';
             exec(cmds, function (err, stdout, stderr) {
