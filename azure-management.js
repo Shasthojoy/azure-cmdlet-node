@@ -161,6 +161,27 @@ module.exports = function (publishSettings, certificate, privateKey) {
                 callback(err, depl ? depl.RequestId : 0);
             });
         }
+
+        function createServiceIfNotExists(service, callback) {
+            getHostedServices(function(services) {
+                if (!services.indexOf(service) > -1)
+                    callback();
+                var data = format('<?xml version="1.0" encoding="utf-8"?>\
+<CreateHostedService xmlns="http://schemas.microsoft.com/windowsazure">\
+  <ServiceName>:0</ServiceName>\
+  <Label>:1</Label>\
+  <Location>North Central US</Location>\
+</CreateHostedService>', service, new Buffer(service, "utf8").toString("base64"));
+
+                var url = "/services/hostedservices";
+
+                doAzureRequest(url, "2010-10-28", data, function (err, depl) {
+                    callback(err, depl ? depl.RequestId : 0);
+                });
+            });
+        }
+
+
         
         /**
          * Create or upgrade a deployment
@@ -234,6 +255,7 @@ module.exports = function (publishSettings, certificate, privateKey) {
         return {
             getHostedServices: getHostedServices,
             createUpdateDeployment: createUpdateDeployment,
+            createServiceIfNotExists: createServiceIfNotExists,
             getStatus: getStatus,
             getStorageServices: getStorageServices,
             getStorageCredentials: getStorageCredentials

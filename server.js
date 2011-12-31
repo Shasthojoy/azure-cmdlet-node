@@ -10,6 +10,16 @@ var azureMgt = new AzureMgt(
                         fs.readFileSync("./certificates/master.cer", "ascii"),
                         fs.readFileSync("./certificates/ca.key", "ascii")
                 );
+var program = require('commander');
+
+program
+    .option('-s, --service [serviceName]', 'Hosted service name')
+    .parse(process.argv);
+
+if (program.service == null) {
+    console.log('Hosted service name is required');
+    return;
+}
 
 packager("./my-application", "./build_temp/" + uuid.v4(), function (file) {
     console.log("packaged @ " + file);
@@ -21,7 +31,7 @@ packager("./my-application", "./build_temp/" + uuid.v4(), function (file) {
             console.log("package removed from filesystem");
         });
         
-        publishPackage(pkg, function (err) {
+        publishPackage(pkg, program.service, function (err) {
             if (err) {
                 console.log("publish error", err);
             }
@@ -37,31 +47,47 @@ packager("./my-application", "./build_temp/" + uuid.v4(), function (file) {
 /**
  * Publish a .cspkg
  */
-function publishPackage(pkg, callback) {
-    azureMgt.getHostedServices(function (services) {
-        console.log("starting deployment for " + services[0]);
-        
-        azureMgt.createUpdateDeployment(services[0], "production", pkg, function (err, deplId) {
-            console.log("deployment started with id " + deplId);
-            
-            var checkStatus = function () {
-                azureMgt.getStatus(deplId, function (err, finished) {
-                    if (!err && finished) {
-                        callback(null);
-                    }
-                    else if (err) {
-                        callback(err);
-                    }
-                    else {
-                        setTimeout(checkStatus, 1000);
-                    }
-                });
-            };
-            
-            setTimeout(checkStatus, 1000);
-            
-        });
+function publishPackage(pkg, service, callback) {
+    console.log("creating service " + service);
+
+    azureMgt.createServiceIfNotExists(service, function(err, deplId) {
+        if (err) {
+            callback(err);
+            return;
+        }
+        checkStatus(deplId, createUpdateDeployment);
+        //setTimeout(checkStatus(deplId, createUpdateDeployment), 1000);
     });
+
+
+
+    function createUpdateDeployment(err) {
+        console.log("starting deployment for " + service);
+        if (err) {
+            callback(err);
+            return;
+        }
+        azureMgt.createUpdateDeployment(service, "production", pkg, function (err, deplId) {
+            console.log("deployment started with id " + deplId);
+            checkStatus(deplId, callback);
+        });
+    }
+
+    function checkStatus(deplId, callback) {
+        azureMgt.getStatus(deplId, function (err, finished) {
+            if (!err && finished) {
+                callback(null);
+            }
+            else if (err) {
+                callback(err);
+                return;
+            }
+            else {
+                setTimeout(checkStatus(deplId, callback), 1000);
+            }
+        });
+    }
+
 }
 /**
  * Upload a .cspkg file to Windows Azure Blob Storage
