@@ -5,21 +5,47 @@ var path = require("path");
 var AzureMgt = require("./azure-management");
 var packager = require("./azure-packager-node")
 
-var azureMgt = new AzureMgt(
-                        fs.readFileSync("./elvis.publishsettings", "ascii"),
-                        fs.readFileSync("./certificates/master.cer", "ascii"),
-                        fs.readFileSync("./certificates/ca.key", "ascii")
-                );
+
 var program = require('commander');
 
 program
-    .option('-s, --service [serviceName]', 'Hosted service name')
+    .option('-s, --service [serviceName]', 'hosted service name')
+    .option('-c, --cert', 'create X509 cert for the Azure mangement portal')
+    .option('-p, --portal', 'opens the Azure management portal')
     .parse(process.argv);
+
+if (program.cert) {
+    var azureMgt = new AzureMgt();
+    azureMgt.createCert(function(err) {
+        if (err) {
+            console.log(err);
+        }
+        return;
+    });
+    return;
+}
+
+if (program.portal) {
+    var azureMgt = new AzureMgt();
+    azureMgt.openPortal(function(err, stdout) {
+        if (err) {
+            console.log(err);
+        }
+        return;
+    });
+    return;
+}
 
 if (program.service == null) {
     console.log('Hosted service name is required');
     return;
 }
+
+var azureMgt = new AzureMgt(
+                        fs.readFileSync("./elvis.publishsettings", "ascii"),
+                        fs.readFileSync("./certificates/master.cer", "ascii"),
+                        fs.readFileSync("./certificates/ca.key", "ascii")
+                );
 
 packager("./my-application", "./build_temp/" + uuid.v4(), function (file) {
     console.log("packaged @ " + file);

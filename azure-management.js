@@ -12,6 +12,8 @@
  */
 var request = require("request");
 var xml2js = require('xml2js');
+var exec = require('child_process').exec;
+
 
 module.exports = function (publishSettings, certificate, privateKey) {
     var exp = (function () {
@@ -62,6 +64,32 @@ module.exports = function (publishSettings, certificate, privateKey) {
                     }
                 });
             });
+        }
+
+        function createCert(callback) {
+            var cmds='mkdir certificates &&\
+openssl genrsa -out ./certificates/ca.key 2048 &&\
+openssl req -new -x509 -days 1001 -key ./certificates/ca.key -out ./certificates/master.cer -batch &&\
+openssl x509 -in ./certificates/master.cer -outform DER -out ./certificates/master-der.cer';
+            exec(cmds, function (err, stdout, stderr) {
+                if (err) {
+                    callback(err);
+                    return;
+                }
+                console.log("X509 Certificate created in ./certificates");
+                callback();
+            }); 
+        }
+
+        function openPortal() {
+            var cmd='open http://windows.azure.com';
+            exec(cmd, function (err, stdout, stderr) {
+                if (err) {
+                    callback(err);
+                    return;
+                }
+                callback();
+            }); 
         }
        
         /**
@@ -251,6 +279,8 @@ module.exports = function (publishSettings, certificate, privateKey) {
                 callback(data.StorageServiceKeys.Primary, data.StorageServiceKeys.Secondary);
             });            
         }
+
+
         
         return {
             getHostedServices: getHostedServices,
@@ -258,7 +288,9 @@ module.exports = function (publishSettings, certificate, privateKey) {
             createServiceIfNotExists: createServiceIfNotExists,
             getStatus: getStatus,
             getStorageServices: getStorageServices,
-            getStorageCredentials: getStorageCredentials
+            getStorageCredentials: getStorageCredentials,
+            createCert: createCert,
+            openPortal: openPortal
         };
        
     }());
