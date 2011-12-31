@@ -9,9 +9,9 @@ var packager = require("./azure-packager-node")
 var program = require('commander');
 
 program
-    .option('-s, --service [serviceName]', 'hosted service name')
+    .option('-p, --publish [serviceName]', 'publish the service')
     .option('-c, --cert', 'create X509 cert for the Azure mangement portal')
-    .option('-p, --portal', 'opens the Azure management portal')
+    .option('-po, --portal', 'opens the Azure management portal')
     .parse(process.argv);
 
 if (program.cert) {
@@ -36,37 +36,39 @@ if (program.portal) {
     return;
 }
 
-if (program.service == null) {
-    console.log('Hosted service name is required');
-    return;
-}
+if (program.publish != undefined) { 
 
-var azureMgt = new AzureMgt(
-                        fs.readFileSync("./elvis.publishsettings", "ascii"),
-                        fs.readFileSync("./certificates/master.cer", "ascii"),
-                        fs.readFileSync("./certificates/ca.key", "ascii")
-                );
-
-packager("./apps/" + program.service, "./build_temp/" + uuid.v4(), function (file) {
-    console.log("packaged @ " + file);
-    
-    uploadPackage(file, function (pkg) {
-        console.log("package uploaded", pkg);
+    var azureMgt = new AzureMgt(
+                            fs.readFileSync("./elvis.publishsettings", "ascii"),
+                            fs.readFileSync("./certificates/master.cer", "ascii"),
+                            fs.readFileSync("./certificates/ca.key", "ascii")
+                    );
+    console.log("creating package");
+    packager("./apps/" + program.service, "./build_temp/" + uuid.v4(), function (file) {
+        console.log("packaged @ " + file);
         
-        fs.unlink(file, function () {
-            console.log("package removed from filesystem");
-        });
-        
-        publishPackage(pkg, program.service, function (err) {
-            if (err) {
-                console.log("publish error", err);
-            }
-            else {
-                console.log("publish succeeded");
-            }
+        uploadPackage(file, function (pkg) {
+            console.log("package uploaded", pkg);
+            
+            fs.unlink(file, function () {
+                console.log("package removed from filesystem");
+            });
+            
+            publishPackage(pkg, program.service, function (err) {
+                if (err) {
+                    console.log("publish error", err);
+                }
+                else {
+                    console.log("publish succeeded");
+                }
+            });
         });
     });
-});
+    return;
+}
+console.log(program.helpInformation());
+//console.log("azure --help to list all commands");
+return;
 
 /* === Helper functions === */
 
