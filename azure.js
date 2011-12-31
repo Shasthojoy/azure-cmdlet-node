@@ -1,5 +1,5 @@
 var fs = require("fs");
-var azure = require("azure-sdk-for-node");
+var azure = require("azure");
 var uuid = require("node-uuid");
 var path = require("path");
 var AzureMgt = require("./azure-management");
@@ -37,6 +37,10 @@ if (program.portal) {
 }
 
 if (program.publish != undefined) { 
+    if (program.publish == true) {
+        console.log("error: service name is required");
+        return;
+    }
 
     var azureMgt = new AzureMgt(
                             fs.readFileSync("./elvis.publishsettings", "ascii"),
