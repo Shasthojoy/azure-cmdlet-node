@@ -1,0 +1,24 @@
+{
+  "author": "Jan Jongboom",
+  "name": "azure-package-example",
+  "description": "Tool for publishing to azure from node",
+  "version": "0.0.1",
+  "repository": {
+    "type": "git",
+    "url": "https://janjongboom@bitbucket.org/janjongboom/azure-package-example.git"
+  },
+  "engines": {
+    "node": "0.4.12"
+  },
+  "dependencies": {
+    "xmlbuilder": "~0.3.1",
+    "log": "~1.2.0",
+    "qs": "~0.4.0",
+    "mime": "~1.2.4",
+    "node-uuid": "~1.3.1",
+    "request": "~2.9.3",
+    "xml2js": "~0.1.13",
+    "commander": "~0.5.1"
+  },
+  "devDependencies": {}
+}

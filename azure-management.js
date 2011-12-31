@@ -81,7 +81,7 @@ openssl x509 -in ./certificates/master.cer -outform DER -out ./certificates/mast
             }); 
         }
 
-        function openPortal() {
+        function openPortal(callback) {
             var cmd='open http://windows.azure.com';
             exec(cmd, function (err, stdout, stderr) {
                 if (err) {
@@ -192,8 +192,10 @@ openssl x509 -in ./certificates/master.cer -outform DER -out ./certificates/mast
 
         function createServiceIfNotExists(service, callback) {
             getHostedServices(function(services) {
-                if (!services.indexOf(service) > -1)
+                if (services.indexOf(service) > -1) {
                     callback();
+                    return;
+                }
                 var data = format('<?xml version="1.0" encoding="utf-8"?>\
 <CreateHostedService xmlns="http://schemas.microsoft.com/windowsazure">\
   <ServiceName>:0</ServiceName>\
