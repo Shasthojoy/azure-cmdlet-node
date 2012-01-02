@@ -7,7 +7,7 @@ function PublishHelper(azureMgt) {
     /**
      * Publish a .cspkg
      */
-    function publishPackage(pkg, service, callback) {
+    function publishPackage(pkg, service, config, callback) {
         console.log("creating service " + service);
     
         azureMgt.createServiceIfNotExists(service, function(err, deplId) {
@@ -16,17 +16,13 @@ function PublishHelper(azureMgt) {
                 return;
             }
             
-            createUpdateDeployment();
-        });
-
-        function createUpdateDeployment() {
             console.log("starting deployment for " + service);
 
-            azureMgt.createUpdateDeployment(service, "production", pkg, function (err, deplId) {
+            azureMgt.createUpdateDeployment(service, "production", pkg, config, function (err, deplId) {
                 console.log("deployment started with id " + deplId);
                 azureMgt.monitorStatus(deplId, callback);
             });
-        }    
+        }); 
     }
     
     /**

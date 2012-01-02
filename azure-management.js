@@ -89,6 +89,10 @@ module.exports = function (publishSettings, certificate, privateKey) {
          */
         function getHostedServiceDeploymentInfo(service, slot, callback) {
             doAzureRequest(format("/services/hostedservices/:0?embed-detail=true", service), "2011-10-01", null, function (err, obj) {
+                if (err || !obj) {
+                    callback([]);
+                }
+                
                 var deploys = normalizeArray(obj.Deployments.Deployment);
                 deploys = deploys.filter(function (d) { return d.DeploymentSlot.toLowerCase() === slot.toLowerCase(); });
 
@@ -115,51 +119,57 @@ module.exports = function (publishSettings, certificate, privateKey) {
         }
         
         /**
+         * Generate a config file
+         */
+        function generateConfigFile(service, config) {
+            if (!config) {
+                config = { };
+            }
+
+            config.operatingSystem = config.operatingSystem || constants.OS.WIN2008_SP2;
+            config.instanceCount = config.instanceCount || 1;
+
+            var configFile = format('<?xml version="1.0"?>\
+<ServiceConfiguration xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:xsd="http://www.w3.org/2001/XMLSchema"\
+    serviceName=":0" osFamily=":1" osVersion="*" xmlns="http://schemas.microsoft.com/ServiceHosting/2008/10/ServiceConfiguration">\
+  <Role name="WebRole1">\
+    <ConfigurationSettings />\
+    <Instances count=":2" />\
+    <Certificates />\
+  </Role>\
+</ServiceConfiguration>', service, config.operatingSystem, config.instanceCount);
+
+            return configFile;
+        }
+        
+        /**
          * Do a rolling upgrade of an already existing deployment
          */
         function updateDeployment(service, slot, packageUrl, callback) {
-            // @todo: read instance count from deployment
-            
-            var configFile = format('<?xml version="1.0"?>\
-<ServiceConfiguration xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:xsd="http://www.w3.org/2001/XMLSchema"\
-    serviceName=":0" osFamily="1" osVersion="*" xmlns="http://schemas.microsoft.com/ServiceHosting/2008/10/ServiceConfiguration">\
-  <Role name="WebRole1">\
-    <ConfigurationSettings />\
-    <Instances count="1" />\
-    <Certificates />\
-  </Role>\
-</ServiceConfiguration>', service);
-            
-            var data = format('<?xml version="1.0" encoding="utf-8"?>\
+            getHostedServiceDeploymentInfo(service, slot, function (depls) {
+                var deploy = depls[depls.length - 1];
+                
+                var data = format('<?xml version="1.0" encoding="utf-8"?>\
 <UpgradeDeployment xmlns="http://schemas.microsoft.com/windowsazure">\
    <Mode>auto</Mode>\
    <PackageUrl>:0</PackageUrl>\
    <Configuration>:1</Configuration>\
    <Label>:2</Label>\
-</UpgradeDeployment>', packageUrl, new Buffer(configFile, "utf8").toString("base64"), new Buffer(uuid(), "utf8").toString("base64"));
-            
-            var url = format("/services/hostedservices/:0/deploymentslots/:1/?comp=upgrade", service, slot);
-            
-            doAzureRequest(url, "2009-10-01", data, function (err, depl) {
-                callback(err, depl ? depl.RequestId : 0);
+</UpgradeDeployment>', packageUrl, deploy.Configuration, new Buffer(uuid(), "utf8").toString("base64"));
+                
+                var url = format("/services/hostedservices/:0/deploymentslots/:1/?comp=upgrade", service, slot);
+                
+                doAzureRequest(url, "2009-10-01", data, function (err, depl) {
+                    callback(err, depl ? depl.RequestId : 0);
+                });                
             });
         }
         
         /**
          * Do a rolling upgrade of an already existing deployment
          */
-        function createDeployment(service, slot, packageUrl, callback) {
-            // @todo: read instance count from deployment
-            
-            var configFile = format('<?xml version="1.0"?>\
-<ServiceConfiguration xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:xsd="http://www.w3.org/2001/XMLSchema"\
-    serviceName=":0" osFamily="1" osVersion="*" xmlns="http://schemas.microsoft.com/ServiceHosting/2008/10/ServiceConfiguration">\
-  <Role name="WebRole1">\
-    <ConfigurationSettings />\
-    <Instances count="1" />\
-    <Certificates />\
-  </Role>\
-</ServiceConfiguration>', service);
+        function createDeployment(service, slot, packageUrl, config, callback) {
+            var configFile = generateConfigFile(service, config);
             
             var data = format('<?xml version="1.0" encoding="utf-8"?>\
 <CreateDeployment xmlns="http://schemas.microsoft.com/windowsazure">\
@@ -210,13 +220,13 @@ module.exports = function (publishSettings, certificate, privateKey) {
         /**
          * Create or upgrade a deployment
          */
-        function createUpdateDeployment(service, slot, packageUrl, callback) {
+        function createUpdateDeployment(service, slot, packageUrl, config, callback) {
             getDeployment(service, slot, function (depl) {
                 if (depl) {
                     updateDeployment(service, slot, packageUrl, callback);
                 }
                 else {
-                    createDeployment(service, slot, packageUrl, callback);
+                    createDeployment(service, slot, packageUrl, config, callback);
                 }
             });
         }
@@ -293,6 +303,29 @@ module.exports = function (publishSettings, certificate, privateKey) {
         }
         
         /**
+         * Update the configuration of a running deploy
+         */
+        function upgradeConfiguration(service, slot, config, callback) {
+            var conf = generateConfigFile(service, config);
+            
+            var post = format('<?xml version="1.0" encoding="utf-8"?>\
+<ChangeConfiguration xmlns="http://schemas.microsoft.com/windowsazure">\
+   <Configuration>:0</Configuration>\
+   <TreatWarningsAsError>false</TreatWarningsAsError>\
+   <Mode>Auto</Mode>\
+</ChangeConfiguration>', new Buffer(conf, "utf8").toString("base64"));
+
+            var url = format("/services/hostedservices/:0/deploymentslots/:1/?comp=config", service, slot);
+            doAzureRequest(url, "2011-08-01", post, function (err, data) {
+                if (err) {
+                    callback(err);
+                }
+                
+                callback(data.RequestId);
+            });
+        }
+        
+        /**
          * xml2js doesn't do xsd's, so the format may vary depending on the number of
          * items in the xml message. This one normalizes arrays.
          */
@@ -308,6 +341,13 @@ module.exports = function (publishSettings, certificate, privateKey) {
             }
         }
         
+        var constants = {
+            OS: {
+                WIN2008_SP2: 1,
+                WIN2008_R2: 2
+            }
+        }
+        
         return {
             getHostedServices: getHostedServices,
             createUpdateDeployment: createUpdateDeployment,
@@ -317,7 +357,9 @@ module.exports = function (publishSettings, certificate, privateKey) {
             getStorageCredentials: getStorageCredentials,
             monitorStatus: monitorStatus,
             getHostedServiceDeploymentInfo: getHostedServiceDeploymentInfo,
-            $normalizeArray: normalizeArray
+            upgradeConfiguration: upgradeConfiguration,
+            $normalizeArray: normalizeArray,
+            constants: constants
         };
        
     }());

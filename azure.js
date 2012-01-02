@@ -38,6 +38,14 @@ else if (program.publish) {
                             fs.readFileSync("./certificates/master.cer", "ascii"),
                             fs.readFileSync("./certificates/ca.key", "ascii")
                     );
+    
+    /* // you can update the config of a deployment like this:
+    azureMgt.upgradeConfiguration(program.publish, "production", { instanceCount: 2 }, function (reqId) {
+        azureMgt.monitorStatus(reqId, function (err) {
+            console.log("config update", err);
+        });
+    });
+    */
                     
     var publish = new PublishHelper(azureMgt);
         
@@ -52,7 +60,14 @@ else if (program.publish) {
                 console.log("package removed from filesystem");
             });
             
-            publish.publishPackage(pkg, program.publish, function (err) {
+            // specify the (default) config settings, they will be set if a new deployment is created
+            // otherwise use 'upgradeConfiguration([service], [slot], [config], [callback])'
+            var defaultConfig = {
+                operatingSystem: azureMgt.constants.OS.WIN2008_SP2,
+                instanceCount: 1
+            };
+            
+            publish.publishPackage(pkg, program.publish, defaultConfig, function (err) {
                 if (err) {
                     console.log("publish error", err);
                 }
