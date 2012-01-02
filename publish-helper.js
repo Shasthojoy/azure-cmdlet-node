@@ -68,8 +68,12 @@ function PublishHelper(azureMgt) {
                 
                 var roles = azureMgt.$normalizeArray(d.RoleInstanceList.RoleInstance);
                 var role = roles[roles.length - 1];
-                                
-                if (role.InstanceStatus === "ReadyRole") {
+                
+                if (role.instanceStatus === "StoppedVM") {
+                    // @todo start the VM
+                    callback(d.Url);
+                }
+                else if (role.InstanceStatus === "ReadyRole") {
                     callback(d.Url);
                 }
                 else {
@@ -84,7 +88,4 @@ function PublishHelper(azureMgt) {
         checkServiceRunning();            
     }
 
-    this.publishPackage = publishPackage;
-    this.uploadPackage = uploadPackage;
-    this.waitForServiceToBeStarted = waitForServiceToBeStarted;
-}
+  
