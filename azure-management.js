@@ -69,8 +69,8 @@ module.exports = function (publishSettings, certificate, privateKey) {
          */
         function getHostedServices(callback) {
             doAzureRequest("/services/hostedservices", "2011-10-01", null, function(err, obj) {
-                var services = obj.HostedService instanceof Array ? obj.HostedService : [ obj.HostedService ];
-
+                var services = normalizeArray(obj.HostedService);
+                
                 var resp = services.map(function(svc) {
                     return svc.ServiceName;
                 });
@@ -255,11 +255,7 @@ module.exports = function (publishSettings, certificate, privateKey) {
          */
         function getStorageServices(callback) {
             doAzureRequest("/services/storageservices", "2011-10-01", null, function (err, data) {
-                var services = data.StorageService;
-                
-                if (!data.StorageService instanceof Array) {
-                    services = [ services ];
-                }
+                var services = normalizeArray(data.StorageService);
                 
                 callback(services);
             });
@@ -274,6 +270,22 @@ module.exports = function (publishSettings, certificate, privateKey) {
             doAzureRequest(url, "2011-10-01", null, function (err, data) {
                 callback(data.StorageServiceKeys.Primary, data.StorageServiceKeys.Secondary);
             });            
+        }
+        
+        /**
+         * xml2js doesn't do xsd's, so the format may vary depending on the number of
+         * items in the xml message. This one normalizes arrays.
+         */
+        function normalizeArray(field) {
+            if (!field) {
+                return [];
+            }
+            else if (!field instanceof Array) {
+                return [ field ];
+            }
+            else {
+                return field;
+            }
         }
         
         return {
