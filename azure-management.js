@@ -12,8 +12,6 @@
  */
 var request = require("request");
 var xml2js = require('xml2js');
-var exec = require('child_process').exec;
-
 
 module.exports = function (publishSettings, certificate, privateKey) {
     var exp = (function () {
@@ -66,38 +64,14 @@ module.exports = function (publishSettings, certificate, privateKey) {
             });
         }
 
-        function createCert(callback) {
-            var cmds='openssl genrsa -out ./certificates/ca.key 2048 &&\
-openssl req -new -x509 -days 1001 -key ./certificates/ca.key -out ./certificates/master.cer -batch &&\
-openssl x509 -in ./certificates/master.cer -outform DER -out ./certificates/master-der.cer';
-            exec(cmds, function (err, stdout, stderr) {
-                if (err) {
-                    callback(err);
-                    return;
-                }
-                console.log("X509 Certificate created in ./certificates");
-                callback();
-            }); 
-        }
-
-        function openPortal(callback) {
-            var cmd='open http://windows.azure.com';
-            exec(cmd, function (err, stdout, stderr) {
-                if (err) {
-                    callback(err);
-                    return;
-                }
-                callback();
-            }); 
-        }
-       
         /**
          * Retrieve a list of hosted services by name
          */
-        
         function getHostedServices(callback) {
             doAzureRequest("/services/hostedservices", "2011-10-01", null, function(err, obj) {
-                var resp = obj.HostedService.map(function(svc) {
+                var services = obj.HostedService instanceof Array ? obj.HostedService : [ obj.HostedService ];
+
+                var resp = services.map(function(svc) {
                     return svc.ServiceName;
                 });
         
@@ -180,8 +154,6 @@ openssl x509 -in ./certificates/master.cer -outform DER -out ./certificates/mast
   <TreatWarningsAsError>false</TreatWarningsAsError>\
 </CreateDeployment>', packageUrl, new Buffer(uuid(), "utf8").toString("base64"), new Buffer(configFile, "utf8").toString("base64"), uuid());
             
-            console.log("deployment", data);
-            
             var url = format("/services/hostedservices/:0/deploymentslots/:1", service, slot);
             
             doAzureRequest(url, "2011-08-01", data, function (err, depl) {
@@ -205,12 +177,15 @@ openssl x509 -in ./certificates/master.cer -outform DER -out ./certificates/mast
                 var url = "/services/hostedservices";
 
                 doAzureRequest(url, "2010-10-28", data, function (err, depl) {
-                    callback(err, depl ? depl.RequestId : 0);
+                    if (depl.RequestId) {
+                        monitorStatus(depl.RequestId, callback);
+                    }
+                    else {
+                        callback(err);
+                    }
                 });
             });
         }
-
-
         
         /**
          * Create or upgrade a deployment
@@ -255,6 +230,26 @@ openssl x509 -in ./certificates/master.cer -outform DER -out ./certificates/mast
         }
         
         /**
+         * Wrapper around 'getStatus', monitors a requestId until it has been completed.
+         * The callback contains one parameter 'err' that is filled with the error message
+         * if the task failed.
+         */
+        function monitorStatus(requestId, onComplete) {
+            getStatus(requestId, function (err, finished) {
+                if (!err && finished) {
+                    onComplete(null);
+                }
+                else if (err) {
+                    onComplete(err);
+                    return;
+                }
+                else {
+                    setTimeout(monitorStatus(requestId, onComplete), 2000);
+                }                
+            });
+        }
+        
+        /**
          * Retrieve a list of all storage services
          * Returns an error containing ServiceName and Url of the accounts
          */
@@ -280,8 +275,6 @@ openssl x509 -in ./certificates/master.cer -outform DER -out ./certificates/mast
                 callback(data.StorageServiceKeys.Primary, data.StorageServiceKeys.Secondary);
             });            
         }
-
-
         
         return {
             getHostedServices: getHostedServices,
@@ -290,8 +283,7 @@ openssl x509 -in ./certificates/master.cer -outform DER -out ./certificates/mast
             getStatus: getStatus,
             getStorageServices: getStorageServices,
             getStorageCredentials: getStorageCredentials,
-            createCert: createCert,
-            openPortal: openPortal
+            monitorStatus: monitorStatus
         };
        
     }());
