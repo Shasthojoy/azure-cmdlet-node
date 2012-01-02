@@ -40,7 +40,7 @@ else if (program.publish) {
                     );
                     
     var publish = new PublishHelper(azureMgt);
-    
+        
     console.log("creating package for './apps/" + program.publish + "'");
     packager("./apps/" + program.publish, "./build_temp/" + uuid.v4(), function (file) {
         console.log("packaged @ " + file);
@@ -59,6 +59,10 @@ else if (program.publish) {
                 else {
                     console.log("publish succeeded");
                 }
+                
+                publish.waitForServiceToBeStarted(program.publish, function (url) {
+                    console.log("Service running and available on " + url);
+                });
             });
         });
     });

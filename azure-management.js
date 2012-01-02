@@ -80,6 +80,23 @@ module.exports = function (publishSettings, certificate, privateKey) {
         }
         
         /**
+         * Retrieve an detailled list of all the deployment properties for a given service.
+         * The callback retrieves an array containing all the deployment objects matching the given slot, 
+         * consisting of (a.o.):
+         * - Status (Running, Starting, etc.)
+         * - Url (public visible URL)
+         * - Configuration (Base64 encoded config file)
+         */
+        function getHostedServiceDeploymentInfo(service, slot, callback) {
+            doAzureRequest(format("/services/hostedservices/:0?embed-detail=true", service), "2011-10-01", null, function (err, obj) {
+                var deploys = normalizeArray(obj.Deployments.Deployment);
+                deploys = deploys.filter(function (d) { return d.DeploymentSlot.toLowerCase() === slot.toLowerCase(); });
+
+                callback(deploys);
+            });
+        }
+        
+        /**
          * See whether there already is a deployment for a certain service & slot
          */
         function getDeployment(service, slot, callback) {
@@ -161,6 +178,9 @@ module.exports = function (publishSettings, certificate, privateKey) {
             });
         }
 
+        /**
+         * Create a service if it doesn't exist yet
+         */
         function createServiceIfNotExists(service, callback) {
             getHostedServices(function(services) {
                 if (services.indexOf(service) > -1) {
@@ -280,7 +300,7 @@ module.exports = function (publishSettings, certificate, privateKey) {
             if (!field) {
                 return [];
             }
-            else if (!field instanceof Array) {
+            else if (!(field instanceof Array)) {
                 return [ field ];
             }
             else {
@@ -295,7 +315,9 @@ module.exports = function (publishSettings, certificate, privateKey) {
             getStatus: getStatus,
             getStorageServices: getStorageServices,
             getStorageCredentials: getStorageCredentials,
-            monitorStatus: monitorStatus
+            monitorStatus: monitorStatus,
+            getHostedServiceDeploymentInfo: getHostedServiceDeploymentInfo,
+            $normalizeArray: normalizeArray
         };
        
     }());

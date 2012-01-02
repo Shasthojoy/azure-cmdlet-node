@@ -63,8 +63,32 @@ function PublishHelper(azureMgt) {
             });
         });
     }
-
+    
+    function waitForServiceToBeStarted(service, callback) {
+        var lastServiceStatus = "";
+        function checkServiceRunning () {
+            azureMgt.getHostedServiceDeploymentInfo(service, "production", function (depls) {
+                var d = depls[depls.length - 1];
+                
+                var roles = azureMgt.$normalizeArray(d.RoleInstanceList.RoleInstance);
+                var role = roles[roles.length - 1];
+                                
+                if (role.InstanceStatus === "ReadyRole") {
+                    callback(d.Url);
+                }
+                else {
+                    if (lastServiceStatus !== role.InstanceStatus) {
+                        console.log("Service status is now '" + role.InstanceStatus + "'");
+                        lastServiceStatus = role.InstanceStatus;
+                    }
+                    setTimeout(checkServiceRunning, 5000);
+                }
+            });
+        }
+        checkServiceRunning();            
+    }
 
     this.publishPackage = publishPackage;
     this.uploadPackage = uploadPackage;
+    this.waitForServiceToBeStarted = waitForServiceToBeStarted;
 }
