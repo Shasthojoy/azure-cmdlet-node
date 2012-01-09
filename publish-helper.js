@@ -1,5 +1,5 @@
 var uuid = require("node-uuid");
-var azure = require("azure");
+var azure = require("azure-sdk-for-node");
 
 module.exports = function PublishHelper(azureMgt) {
     /**
@@ -86,9 +86,7 @@ module.exports = function PublishHelper(azureMgt) {
         checkServiceRunning();            
     }
 
-    return {
-        publishPackage : publishPackage,
-        uploadPackage : uploadPackage,
-        waitForServiceToBeStarted : waitForServiceToBeStarted
-    };
+    this.publishPackage = publishPackage;
+    this.uploadPackage = uploadPackage;
+    this.waitForServiceToBeStarted = waitForServiceToBeStarted;
 }
