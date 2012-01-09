@@ -1,5 +1,5 @@
 var uuid = require("node-uuid");
-var azure = require("azure-sdk-for-node");
+var azure = require("azure");
 
 module.exports = function PublishHelper(azureMgt) {
     /**
