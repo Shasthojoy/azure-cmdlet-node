@@ -88,4 +88,7 @@ function PublishHelper(azureMgt) {
         checkServiceRunning();            
     }
 
-  
+    this.publishPackage = publishPackage;
+    this.uploadPackage = uploadPackage;
+    this.waitForServiceToBeStarted = waitForServiceToBeStarted;
+}
