@@ -13,7 +13,7 @@
 var request = require("request");
 var xml2js = require('xml2js');
 
-module.exports = function (publishSettings, certificate, privateKey) {
+module.exports = function (publishSettings, certificate, privateKey, debug) {
     var exp = (function () {
        
         /**
@@ -37,8 +37,10 @@ module.exports = function (publishSettings, certificate, privateKey) {
                     key: privateKey
                 }, function (err, resp, body) {
                     if (resp.statusCode >= 300 && resp.statusCode < 600) {
-                        console.log("Response didn't have status in 200 range", url, resp.statusCode, body);
-                        
+                        if (debug) {
+                            console.log("Response didn't have status in 200 range", url, resp.statusCode, body);
+                        }
+
                         err = {
                             msg: "Expected resp.statusCode between 200 and 299",
                             resp: resp,
@@ -193,6 +195,10 @@ module.exports = function (publishSettings, certificate, privateKey) {
          */
         function createServiceIfNotExists(service, callback) {
             getHostedServices(function(services) {
+                if (debug) {
+                    console.log('existing services:', services);
+                }
+                
                 if (services.indexOf(service) > -1) {
                     callback();
                     return;

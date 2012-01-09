@@ -11,6 +11,8 @@ program
     .option('-p, --publish [serviceName]', 'publish the service')
     .option('-c, --cert', 'create X509 cert for the Azure mangement portal')
     .option('-po, --portal', 'opens the Azure management portal')
+    .option('-d, --download', 'download publish settings')
+    .option('-de, --debug', 'output debug messages')
     .parse(process.argv);
 
 if (program.cert) {
@@ -18,10 +20,18 @@ if (program.cert) {
         if (err) {
             console.log(err);
         }
+        console.log("copy the *.publishsettings file in your browser's download directory to azure publish tool folder");
     });
 }
 else if (program.portal) {
     argumentHandler.openPortal(function(err) {
+        if (err) {
+            console.log(err);
+        }
+    });
+}
+else if (program.download) {
+    argumentHandler.downloadPublishSettings(function(err) {
         if (err) {
             console.log(err);
         }
@@ -32,11 +42,31 @@ else if (program.publish) {
         console.log("error: service name is required");
         return;
     }
+        
+    var files = fs.readdirSync("./");
+    
+    //find settings files
+    var settingsFiles = files.filter(function(value, index, object) {
+        if (value.match(".publishsettings$")==".publishsettings") {
+            return true;
+        }
+    });
+
+    //if not settings file was found then display an error
+    if (settingsFiles.length == 0) {
+        console.log("publish settings file (.publishsettings) is required. To download use azure -d");
+        return;
+    }
+
+    //grab the first one
+    var settingsFile = settingsFiles[0];
+    console.log("using settings file:", settingsFile);
 
     var azureMgt = new AzureMgt(
-                            fs.readFileSync("./elvis.publishsettings", "ascii"),
+                            fs.readFileSync(settingsFile, "ascii"),
                             fs.readFileSync("./certificates/master.cer", "ascii"),
-                            fs.readFileSync("./certificates/ca.key", "ascii")
+                            fs.readFileSync("./certificates/ca.key", "ascii"),
+                            program.debug
                     );
     
     /* // you can update the config of a deployment like this:

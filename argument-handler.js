@@ -2,7 +2,8 @@ var exec = require('child_process').exec;
 
 module.exports = {
     createCert: createCert,
-    openPortal: openPortal
+    openPortal: openPortal,
+    downloadPublishSettings: downloadPublishSettings
 };
 
 /**
@@ -34,4 +35,18 @@ function openPortal(callback) {
         }
         callback();
     }); 
+}
+
+/**
+ * Download the publish settings
+*/
+function downloadPublishSettings(callback) {
+    var cmd='open https://windows.azure.com/download/publishprofile.aspx?client=nodejs&amp;lang=en'
+    exec(cmd, function(err) {
+        if (err) {
+            callback(err);
+            return;
+        }
+        callback();
+    });
 }
