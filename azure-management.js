@@ -13,7 +13,7 @@
 var request = require("request");
 var xml2js = require('xml2js');
 
-module.exports = function (publishSettings, certificate, privateKey, debug) {
+module.exports = function (publishSettings, certificate, privateKey) {
     var exp = (function () {
        
         /**
@@ -37,10 +37,8 @@ module.exports = function (publishSettings, certificate, privateKey, debug) {
                     key: privateKey
                 }, function (err, resp, body) {
                     if (resp.statusCode >= 300 && resp.statusCode < 600) {
-                        if (debug) {
-                            console.log("Response didn't have status in 200 range", url, resp.statusCode, body);
-                        }
-
+                        console.log("Response didn't have status in 200 range", url, resp.statusCode, body);
+                        
                         err = {
                             msg: "Expected resp.statusCode between 200 and 299",
                             resp: resp,
@@ -193,12 +191,8 @@ module.exports = function (publishSettings, certificate, privateKey, debug) {
         /**
          * Create a service if it doesn't exist yet
          */
-        function createServiceIfNotExists(service, callback) {
+        function createServiceIfNotExists(service, config, callback) {
             getHostedServices(function(services) {
-                if (debug) {
-                    console.log('existing services:', services);
-                }
-                
                 if (services.indexOf(service) > -1) {
                     callback();
                     return;
@@ -207,8 +201,8 @@ module.exports = function (publishSettings, certificate, privateKey, debug) {
 <CreateHostedService xmlns="http://schemas.microsoft.com/windowsazure">\
   <ServiceName>:0</ServiceName>\
   <Label>:1</Label>\
-  <Location>North Central US</Location>\
-</CreateHostedService>', service, new Buffer(service, "utf8").toString("base64"));
+  <Location>:2</Location>\
+</CreateHostedService>', service, new Buffer(service, "utf8").toString("base64"), (config && config.datacenter) || "North Central US");
 
                 var url = "/services/hostedservices";
 
@@ -332,6 +326,24 @@ module.exports = function (publishSettings, certificate, privateKey, debug) {
         }
         
         /**
+         * List all available datacenters, use to pass in the 'config.datacenter' argument.
+         * 
+         * An array of strings will be passed into the callback function
+         */
+        function getDatacenterLocations(callback) {
+            var url = "/locations";
+            doAzureRequest(url, "2010-10-28", null, function (err, data) {
+                if (err) callback(err);
+                
+                var res = normalizeArray(data.Location).map(function (loc) {
+                    return loc.Name;
+                });
+                
+                callback(res);
+            });
+        }
+        
+        /**
          * xml2js doesn't do xsd's, so the format may vary depending on the number of
          * items in the xml message. This one normalizes arrays.
          */
@@ -365,7 +377,8 @@ module.exports = function (publishSettings, certificate, privateKey, debug) {
             getHostedServiceDeploymentInfo: getHostedServiceDeploymentInfo,
             upgradeConfiguration: upgradeConfiguration,
             $normalizeArray: normalizeArray,
-            constants: constants
+            constants: constants,
+            getDatacenterLocations: getDatacenterLocations
         };
        
     }());

@@ -14,6 +14,7 @@ program
     .option('-c, --cert', 'create X509 cert for the Azure mangement portal')
     .option('-po, --portal', 'opens the Azure management portal')
     .option('-d, --download', 'download publish settings')
+    .option('-l, --locations', 'list all datacenter locations')
     .option('-de, --debug', 'output debug messages')
     .parse(process.argv);
 
@@ -39,37 +40,20 @@ else if (program.download) {
         }
     });
 }
+else if (program.locations) {
+    var azureMgt = getAzureMgt();
+
+    azureMgt.getDatacenterLocations(function (locs) {        
+        var data = locs.join("\n");
+        
+        console.log(data);
+    });
+}
 else if (program.publish) { 
     if (program.publish === true) {
         console.log("error: service name is required");
         return;
     }
-        
-    var files = fs.readdirSync("./");
-    
-    //find settings files
-    var settingsFiles = files.filter(function(value, index, object) {
-        if (value.match(".publishsettings$")==".publishsettings") {
-            return true;
-        }
-    });
-
-    //if not settings file was found then display an error
-    if (settingsFiles.length == 0) {
-        console.log("publish settings file (.publishsettings) is required. To download use azure -d");
-        return;
-    }
-
-    //grab the first one
-    var settingsFile = settingsFiles[0];
-    console.log("using settings file:", settingsFile);
-
-    var azureMgt = new AzureMgt(
-                            fs.readFileSync(settingsFile, "ascii"),
-                            fs.readFileSync("./certificates/master.cer", "ascii"),
-                            fs.readFileSync("./certificates/ca.key", "ascii"),
-                            program.debug
-                    );
     
     /* // you can update the config of a deployment like this:
     azureMgt.upgradeConfiguration(program.publish, "production", { instanceCount: 2 }, function (reqId) {
@@ -79,6 +63,7 @@ else if (program.publish) {
     });
     */
                     
+    var azureMgt = getAzureMgt();
     var publish = new PublishHelper(azureMgt);
         
     console.log("creating package for './apps/" + program.publish + "'");
@@ -116,4 +101,34 @@ else if (program.publish) {
 }
 else {
     console.log(program.helpInformation());
+}
+
+function getAzureMgt() {
+    var files = fs.readdirSync("./");
+    
+    //find settings files
+    var settingsFiles = files.filter(function(value, index, object) {
+        if (value.match(/\.publishsettings$/)) {
+            return true;
+        }
+    });
+
+    //if not settings file was found then display an error
+    if (settingsFiles.length == 0) {
+        console.log("publish settings file (.publishsettings) is required. To download use azure -d");
+        return;
+    }
+
+    //grab the first one
+    var settingsFile = settingsFiles[0];
+    console.log("using settings file:", settingsFile);
+
+    var azureMgt = new AzureMgt(
+                            fs.readFileSync(settingsFile, "ascii"),
+                            fs.readFileSync("./certificates/master.cer", "ascii"),
+                            fs.readFileSync("./certificates/ca.key", "ascii"),
+                            program.debug
+                    ); 
+    
+    return azureMgt;
 }

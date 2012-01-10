@@ -1,14 +1,16 @@
 var uuid = require("node-uuid");
-var azure = require("azure");
+var azure = require("azure-sdk-for-node");
 
-module.exports = function PublishHelper(azureMgt) {
+module.exports = PublishHelper;
+
+function PublishHelper(azureMgt) {
     /**
      * Publish a .cspkg
      */
     function publishPackage(pkg, service, config, callback) {
         console.log("creating service " + service);
     
-        azureMgt.createServiceIfNotExists(service, function(err, deplId) {
+        azureMgt.createServiceIfNotExists(service, config, function(err, deplId) {
             if (err) {
                 callback(err);
                 return;
