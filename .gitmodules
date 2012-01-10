@@ -1,6 +1,6 @@
 [submodule "azure-packager-node"]
     path = azure-packager-node
-    url = https://github.com/janjongboom/azure-packager-node.git
+    url = https://github.com/c9/azure-packager-node.git
 [submodule "node_modules/azure-sdk-for-node"]
     path = node_modules/azure-sdk-for-node
     url = git://github.com/WindowsAzure/azure-sdk-for-node.git
