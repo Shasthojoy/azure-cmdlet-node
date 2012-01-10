@@ -1,9 +1,7 @@
 var uuid = require("node-uuid");
-var azure = require("azure-sdk-for-node");
+var azure = require("azure");
 
-module.exports = PublishHelper;
-
-function PublishHelper(azureMgt) {
+module.exports = function PublishHelper(azureMgt) {
     /**
      * Publish a .cspkg
      */
