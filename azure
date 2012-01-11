@@ -43,7 +43,7 @@ else if (program.download) {
 else if (program.locations) {
     var azureMgt = getAzureMgt();
 
-    azureMgt.getDatacenterLocations(function (locs) {        
+    azureMgt.getDatacenterLocations(function (err, locs) {        
         var data = locs.join("\n");
         
         console.log(data);
@@ -68,9 +68,11 @@ else if (program.publish) {
         
     console.log("creating package for './apps/" + program.publish + "'");
     packager("./apps/" + program.publish, "./build_temp/" + uuid.v4(), function (file) {
-        console.log("packaged @ " + file);
-        
-        publish.uploadPackage(file, function (pkg) {
+        publish.uploadPackage(file, function (err, pkg) {
+            if (err) { 
+                return console.log("uploadPackage failed", err);
+            }
+            
             console.log("package uploaded", pkg);
             
             fs.unlink(file, function () {
@@ -86,13 +88,15 @@ else if (program.publish) {
             
             publish.publishPackage(pkg, program.publish, defaultConfig, function (err) {
                 if (err) {
-                    console.log("publish error", err);
+                    return console.log("publish error", err);
                 }
                 else {
-                    console.log("publish succeeded");
+                    return console.log("publish succeeded");
                 }
                 
-                publish.waitForServiceToBeStarted(program.publish, function (url) {
+                publish.waitForServiceToBeStarted(program.publish, function (err, url) {
+                    if (err) return console.log("waitForServiceToBeStarted failed");
+                    
                     console.log("Service running and available on " + url);
                 });
             });

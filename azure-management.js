@@ -36,29 +36,35 @@ module.exports = function (publishSettings, certificate, privateKey) {
                     cert: certificate,
                     key: privateKey
                 }, function (err, resp, body) {
-                    if (resp.statusCode >= 300 && resp.statusCode < 600) {
-                        console.log("Response didn't have status in 200 range", url, resp.statusCode, body);
+                    
+                    var onBodyParsed = function (bodyAsXml) {
+                        if (resp.statusCode >= 300 && resp.statusCode < 600) {
+                            console.log("Response didn't have status in 200 range", url, resp.statusCode, body);
+                                             
+                            err = {
+                                msg: "Expected resp.statusCode between 200 and 299",
+                                resp: resp,
+                                body: bodyAsXml
+                            };
+                        }
                         
-                        err = {
-                            msg: "Expected resp.statusCode between 200 and 299",
-                            resp: resp,
-                            body: body
-                        };
-                    }
-
-                    if (err) { 
-                        callback(err);
-                        return;
-                    }
+                        if (err) { 
+                            return callback(err);
+                        }
+                        
+                        bodyAsXml = bodyAsXml || {};
+                        bodyAsXml.RequestId = resp.headers["x-ms-request-id"];
+                        
+                        callback(err, bodyAsXml);
+                    };
                     
                     if (body) {
                         parseXml(body, function(obj) {
-                            obj.RequestId = resp.headers["x-ms-request-id"];
-                            callback(err, obj);
-                        });
+                            onBodyParsed(obj);
+                        });     
                     }
                     else {
-                        callback(err, { RequestId: resp.headers["x-ms-request-id"] });
+                        onBodyParsed();
                     }
                 });
             });
@@ -69,13 +75,15 @@ module.exports = function (publishSettings, certificate, privateKey) {
          */
         function getHostedServices(callback) {
             doAzureRequest("/services/hostedservices", "2011-10-01", null, function(err, obj) {
+                if (err) return callback(err);
+                
                 var services = normalizeArray(obj.HostedService);
                 
                 var resp = services.map(function(svc) {
                     return svc.ServiceName;
                 });
         
-                callback(resp);
+                callback(err, resp);
             });
         }
         
@@ -90,13 +98,13 @@ module.exports = function (publishSettings, certificate, privateKey) {
         function getHostedServiceDeploymentInfo(service, slot, callback) {
             doAzureRequest(format("/services/hostedservices/:0?embed-detail=true", service), "2011-10-01", null, function (err, obj) {
                 if (err || !obj) {
-                    callback([]);
+                    callback(null, []);
                 }
                 
                 var deploys = normalizeArray(obj.Deployments.Deployment);
                 deploys = deploys.filter(function (d) { return d.DeploymentSlot.toLowerCase() === slot.toLowerCase(); });
 
-                callback(deploys);
+                callback(null, deploys);
             });
         }
         
@@ -108,10 +116,10 @@ module.exports = function (publishSettings, certificate, privateKey) {
         
             doAzureRequest(url, "2011-10-01", null, function(err, resp) {
                 if (!resp || resp.Code === "ResourceNotFound") {
-                    callback(null);
+                    callback(null, null);
                 }
                 else {
-                    callback({
+                    callback(err, {
                         url: resp.Url
                     });
                 }
@@ -146,7 +154,9 @@ module.exports = function (publishSettings, certificate, privateKey) {
          * Do a rolling upgrade of an already existing deployment
          */
         function updateDeployment(service, slot, packageUrl, callback) {
-            getHostedServiceDeploymentInfo(service, slot, function (depls) {
+            getHostedServiceDeploymentInfo(service, slot, function (err, depls) {
+                if (err) return callback(err);
+                
                 var deploy = depls[depls.length - 1];
                 
                 var data = format('<?xml version="1.0" encoding="utf-8"?>\
@@ -192,7 +202,10 @@ module.exports = function (publishSettings, certificate, privateKey) {
          * Create a service if it doesn't exist yet
          */
         function createServiceIfNotExists(service, config, callback) {
-            getHostedServices(function(services) {
+            console.log("createService", config.datacenter);
+            getHostedServices(function(err, services) {
+                if (err) return callback(err);
+                
                 if (services.indexOf(service) > -1) {
                     callback();
                     return;
@@ -221,7 +234,9 @@ module.exports = function (publishSettings, certificate, privateKey) {
          * Create or upgrade a deployment
          */
         function createUpdateDeployment(service, slot, packageUrl, config, callback) {
-            getDeployment(service, slot, function (depl) {
+            getDeployment(service, slot, function (err, depl) {
+                if (err) return callback(err);
+                
                 if (depl) {
                     updateDeployment(service, slot, packageUrl, callback);
                 }
@@ -241,8 +256,7 @@ module.exports = function (publishSettings, certificate, privateKey) {
             
             doAzureRequest(url, "2011-10-01", null, function (err, operation) {
                 if (err) {
-                    callback(err, true);
-                    return;
+                    return callback(err, true);
                 }
                 
                 switch (operation.Status) {
@@ -265,6 +279,11 @@ module.exports = function (publishSettings, certificate, privateKey) {
          * if the task failed.
          */
         function monitorStatus(requestId, onComplete) {
+            if (typeof onComplete !== "function") {
+                console.log("monitorStatus callback isnt a function");
+                console.trace();
+            }
+            
             getStatus(requestId, function (err, finished) {
                 if (!err && finished) {
                     onComplete(null);
@@ -285,9 +304,11 @@ module.exports = function (publishSettings, certificate, privateKey) {
          */
         function getStorageServices(callback) {
             doAzureRequest("/services/storageservices", "2011-10-01", null, function (err, data) {
+                if (err) return callback(err);
+                
                 var services = normalizeArray(data.StorageService);
                 
-                callback(services);
+                callback(null, services);
             });
         }
         
@@ -298,7 +319,9 @@ module.exports = function (publishSettings, certificate, privateKey) {
             var url = format("/services/storageservices/:0/keys", account);
             
             doAzureRequest(url, "2011-10-01", null, function (err, data) {
-                callback(data.StorageServiceKeys.Primary, data.StorageServiceKeys.Secondary);
+                if (err) return callback(err);
+                
+                callback(null, data.StorageServiceKeys.Primary, data.StorageServiceKeys.Secondary);
             });            
         }
         
@@ -318,10 +341,10 @@ module.exports = function (publishSettings, certificate, privateKey) {
             var url = format("/services/hostedservices/:0/deploymentslots/:1/?comp=config", service, slot);
             doAzureRequest(url, "2011-08-01", post, function (err, data) {
                 if (err) {
-                    callback(err);
+                    return callback(err);
                 }
                 
-                callback(data.RequestId);
+                callback(null, data.RequestId);
             });
         }
         
@@ -333,13 +356,13 @@ module.exports = function (publishSettings, certificate, privateKey) {
         function getDatacenterLocations(callback) {
             var url = "/locations";
             doAzureRequest(url, "2010-10-28", null, function (err, data) {
-                if (err) callback(err);
+                if (err) return callback(err);
                 
                 var res = normalizeArray(data.Location).map(function (loc) {
                     return loc.Name;
                 });
                 
-                callback(res);
+                callback(null, res);
             });
         }
         

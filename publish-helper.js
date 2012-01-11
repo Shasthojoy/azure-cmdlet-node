@@ -3,23 +3,35 @@ var azure = require("azure-sdk-for-node");
 
 module.exports = PublishHelper;
 
-function PublishHelper(azureMgt) {
+function PublishHelper(azureMgt, onProgress) {
+    
+    function log () {
+        console.log.apply(this, arguments);
+    }
+    
     /**
      * Publish a .cspkg
      */
     function publishPackage(pkg, service, config, callback) {
-        console.log("creating service " + service);
+        log("creating service " + service);
     
         azureMgt.createServiceIfNotExists(service, config, function(err, deplId) {
             if (err) {
-                callback(err);
-                return;
+                return callback(err);
             }
             
-            console.log("starting deployment for " + service);
+            log("starting deployment for " + service);
 
             azureMgt.createUpdateDeployment(service, "production", pkg, config, function (err, deplId) {
-                console.log("deployment started with id " + deplId);
+                if (err) {
+                    if (!err.resp) {
+                        return callback(err);
+                    }
+                    
+                    return callback(err.body);
+                }
+                
+                log("deployment started with id " + deplId);
                 azureMgt.monitorStatus(deplId, callback);
             });
         }); 
@@ -29,30 +41,31 @@ function PublishHelper(azureMgt) {
      * Upload a .cspkg file to Windows Azure Blob Storage
      */
     function uploadPackage(file, callback) {
-        azureMgt.getStorageServices(function (svc) {
+        azureMgt.getStorageServices(function (err, svc) {
+            if (err) return callback(err);
+            
             var name = svc[0].ServiceName;
-            console.log("using storage service", name);
-            azureMgt.getStorageCredentials(name, function (primaryKey) {
+            log("using storage service", name);
+            azureMgt.getStorageCredentials(name, function (err, primaryKey) {
+                if (err) return callback(err);
                 
                 var blobService = azure.createBlobService(name, primaryKey);
                 blobService.createContainerIfNotExists('c9deploys', { publicAccessLevel : 'blob' }, function (err) {
                     if (err) {
-                        console.log("BlobService error", err);
-                        return;
+                        log("BlobService error", err);
+                        return callback(err);
                     }
-                    
-                    console.log("created container c9deploys");
                                     
                     var blobname = uuid.v4() + ".cspkg";
-                    console.log("preparing for upload '" + file + "' under blobname '" + blobname + "'");
+                    log("preparing for upload '" + file + "' under blobname '" + blobname + "'");
                     
                     blobService.createBlockBlobFromFile("c9deploys", blobname, file, 11, function (err) {
                         if (err) {
-                            console.log("BlobService error", err);
-                            return;
+                            log("BlobService error", err);
+                            return callback(err);
                         }
                         
-                        callback("http://" + name + ".blob.core.windows.net/c9deploys/" + blobname);
+                        callback(null, "http://" + name + ".blob.core.windows.net/c9deploys/" + blobname);
                     });
                 });
                 
@@ -60,10 +73,12 @@ function PublishHelper(azureMgt) {
         });
     }
     
-    function waitForServiceToBeStarted(service, callback) {
+    function waitForServiceToBeStarted(service, onStatusChange, callback) {
         var lastServiceStatus = "";
         function checkServiceRunning () {
-            azureMgt.getHostedServiceDeploymentInfo(service, "production", function (depls) {
+            azureMgt.getHostedServiceDeploymentInfo(service, "production", function (err, depls) {
+                if (err) return callback(err);
+                
                 var d = depls[depls.length - 1];
                 
                 var roles = azureMgt.$normalizeArray(d.RoleInstanceList.RoleInstance);
@@ -71,14 +86,14 @@ function PublishHelper(azureMgt) {
                 
                 if (role.instanceStatus === "StoppedVM") {
                     // @todo start the VM
-                    callback(d.Url);
+                    return callback(null, d.Url);
                 }
                 else if (role.InstanceStatus === "ReadyRole") {
-                    callback(d.Url);
+                    return callback(null, d.Url);
                 }
                 else {
                     if (lastServiceStatus !== role.InstanceStatus) {
-                        console.log("Service status is now '" + role.InstanceStatus + "'");
+                        onStatusChange(role.InstanceStatus);
                         lastServiceStatus = role.InstanceStatus;
                     }
                     setTimeout(checkServiceRunning, 5000);
