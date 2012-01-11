@@ -79,11 +79,45 @@ module.exports = function (publishSettings, certificate, privateKey) {
                 
                 var services = normalizeArray(obj.HostedService);
                 
-                var resp = services.map(function(svc) {
-                    return svc.ServiceName;
+                var counter = 0, data = [];
+                
+                var pushAndCheck = function (obj) {
+                    data.push(obj);
+                    if (++counter === services.length) {
+                        callback(err, data);
+                    }
+                };
+                
+                var handleDetailedInfo = function (svc, err, info) {                    
+                    if (err) return callback(err);
+                    
+                    var obj = {
+                        name: svc.ServiceName,
+                        datacenter: info.service.HostedServiceProperties.Location
+                    };
+                    
+                    if (!info.deploys.length || !info.deploys[0].Configuration) {
+                        obj.instanceCount = 1;
+                        obj.operatingSystem = 1;
+                        return pushAndCheck(obj);
+                    }
+                    
+                    parseXml(new Buffer(info.deploys[0].Configuration, 'base64').toString('ascii'), function (cfg) {
+                        obj.operatingSystem = cfg["@"].osFamily;
+                        
+                        var role = normalizeArray(cfg.Role)[0];
+                        var instance = normalizeArray(role.Instances)[0];
+                        obj.instanceCount = instance["@"].count;
+                        
+                        pushAndCheck(obj);
+                    });
+                };
+                
+                services.forEach(function (svc) {
+                    getHostedServiceDeploymentInfo(svc.ServiceName, "production", function (err, depl) {
+                        handleDetailedInfo(svc, err, depl);
+                    });
                 });
-        
-                callback(err, resp);
             });
         }
         
@@ -104,7 +138,7 @@ module.exports = function (publishSettings, certificate, privateKey) {
                 var deploys = normalizeArray(obj.Deployments.Deployment);
                 deploys = deploys.filter(function (d) { return d.DeploymentSlot.toLowerCase() === slot.toLowerCase(); });
 
-                callback(null, deploys);
+                callback(null, { deploys: deploys, service: obj });
             });
         }
         
@@ -157,7 +191,7 @@ module.exports = function (publishSettings, certificate, privateKey) {
             getHostedServiceDeploymentInfo(service, slot, function (err, depls) {
                 if (err) return callback(err);
                 
-                var deploy = depls[depls.length - 1];
+                var deploy = depls.deploys[depls.length - 1];
                 
                 var data = format('<?xml version="1.0" encoding="utf-8"?>\
 <UpgradeDeployment xmlns="http://schemas.microsoft.com/windowsazure">\
