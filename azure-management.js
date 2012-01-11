@@ -191,7 +191,7 @@ module.exports = function (publishSettings, certificate, privateKey) {
             getHostedServiceDeploymentInfo(service, slot, function (err, depls) {
                 if (err) return callback(err);
                 
-                var deploy = depls.deploys[depls.length - 1];
+                var deploy = depls.deploys[depls.deploys.length - 1];
                 
                 var data = format('<?xml version="1.0" encoding="utf-8"?>\
 <UpgradeDeployment xmlns="http://schemas.microsoft.com/windowsazure">\
@@ -236,9 +236,10 @@ module.exports = function (publishSettings, certificate, privateKey) {
          * Create a service if it doesn't exist yet
          */
         function createServiceIfNotExists(service, config, callback) {
-            console.log("createService", config.datacenter);
             getHostedServices(function(err, services) {
                 if (err) return callback(err);
+                
+                services = services.map(function (s) { return s.name; });
                 
                 if (services.indexOf(service) > -1) {
                     callback();
