@@ -220,12 +220,13 @@ module.exports = function (publishSettings, certificate, privateKey) {
                 var url = "/services/hostedservices";
 
                 doAzureRequest(url, "2010-10-28", data, function (err, depl) {
-                    if (depl.RequestId) {
-                        monitorStatus(depl.RequestId, callback);
-                    }
-                    else {
+                    if (!depl || !depl.RequestId) {
                         callback(err);
                     }
+                    else {
+                        monitorStatus(depl.RequestId, callback);
+                    }
+                    
                 });
             });
         }
