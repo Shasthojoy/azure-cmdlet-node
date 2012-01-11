@@ -79,7 +79,7 @@ function PublishHelper(azureMgt, onProgress) {
             azureMgt.getHostedServiceDeploymentInfo(service, "production", function (err, depls) {
                 if (err) return callback(err);
                 
-                var d = depls[depls.length - 1];
+                var d = depls.deploys[depls.length - 1];
                 
                 var roles = azureMgt.$normalizeArray(d.RoleInstanceList.RoleInstance);
                 var role = roles[roles.length - 1];
