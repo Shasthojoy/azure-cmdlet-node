@@ -24,7 +24,9 @@ module.exports = function (publishSettings, certificate, privateKey) {
             
             url = url.indexOf("/") === 0 ? url.substring(1) : url;
             
-            parsePublishSettings(publishSettings, function (sett) {
+            parsePublishSettings(publishSettings, function (err, sett) {
+                if (err) return callback(err);
+                
                 request({
                     url: format(":0/:1/:2", sett.url, sett.id, url),
                     method: method,
@@ -59,7 +61,9 @@ module.exports = function (publishSettings, certificate, privateKey) {
                     };
                     
                     if (body) {
-                        parseXml(body, function(obj) {
+                        parseXml(body, function(err, obj) {
+                            if (err) return callback(err);
+                            
                             onBodyParsed(obj);
                         });     
                     }
@@ -102,7 +106,9 @@ module.exports = function (publishSettings, certificate, privateKey) {
                         return pushAndCheck(obj);
                     }
                     
-                    parseXml(new Buffer(info.deploys[0].Configuration, 'base64').toString('ascii'), function (cfg) {
+                    parseXml(new Buffer(info.deploys[0].Configuration, 'base64').toString('ascii'), function (err, cfg) {
+                        if (err) return callback(err);
+                        
                         obj.operatingSystem = cfg["@"].osFamily;
                         
                         var role = normalizeArray(cfg.Role)[0];
@@ -437,7 +443,8 @@ module.exports = function (publishSettings, certificate, privateKey) {
             upgradeConfiguration: upgradeConfiguration,
             $normalizeArray: normalizeArray,
             constants: constants,
-            getDatacenterLocations: getDatacenterLocations
+            getDatacenterLocations: getDatacenterLocations,
+            parsePublishSettings: parsePublishSettings
         };
        
     }());
@@ -467,14 +474,20 @@ function format () {
  * Parse the publish settings XML and retrieve it back as a nice object
  */
 function parsePublishSettings (data, callback) {
-    parseXml(data, function (obj) {
+    parseXml(data, function (err, obj) {
+        if (err) return callback(err, null);
+        
+        if (!obj.PublishProfile || !obj.PublishProfile["@"]) {
+            return callback("This file doesn't seem to be a publish settings file");
+        }
+        
         var opts = {
             url: obj.PublishProfile["@"].Url,
             certificate: obj.PublishProfile["@"].ManagementCertificate,
             id: obj.PublishProfile.Subscription["@"].Id
         };
         
-        callback(opts);
+        callback(null, opts);
     });
 }
 
@@ -484,8 +497,17 @@ function parsePublishSettings (data, callback) {
 function parseXml(data, callback) {
     var parser = new xml2js.Parser();
     
+    data = data || "";
+    
     parser.on('end', function(result) {
-        callback(result);
+        if (!result) {
+            return callback("xml2js was feeded with an empty string");
+        }
+        callback(null, result);
+    });
+    
+    parser.on('error', function (err) {
+        callback(err, null);
     });
     
     parser.parseString(data);
@@ -498,17 +520,3 @@ function uuid() {
     
     return (S4()+S4()+"-"+S4()+"-"+S4()+"-"+S4()+"-"+S4()+S4()+S4());
 }
-
-/*
-<?xml version="1.0" encoding="utf-8"?>
-<PublishData>
-  <PublishProfile
-    PublishMethod="AzureServiceManagementAPI"
-    Url="https://management.core.windows.net/"
-    ManagementCertificate="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">
-    <Subscription
-      Id="9345d853-bcb4-49cb-980c-48aaca5cdc19"
-      Name="3-Month Free Trial" />
-  </PublishProfile>
-</PublishData>
-*/
