@@ -3,7 +3,7 @@ var azure = require("azure-sdk-for-node");
 
 module.exports = PublishHelper;
 
-function PublishHelper(azureMgt, onProgress) {
+function PublishHelper(azureMgt) {
     
     function log () {
         console.log.apply(this, arguments);
@@ -15,7 +15,7 @@ function PublishHelper(azureMgt, onProgress) {
     function publishPackage(pkg, service, config, callback) {
         log("creating service " + service);
     
-        azureMgt.createServiceIfNotExists(service, config, function(err, deplId) {
+        azureMgt.createServiceIfNotExists(service, config, function(err) {
             if (err) {
                 return callback(err);
             }

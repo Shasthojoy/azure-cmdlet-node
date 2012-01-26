@@ -11,13 +11,13 @@
  * (c) Cloud9 IDE, Inc. 2011
  */
 var request = require("request");
-var xml2js = require('xml2js');
+var xml2js = require("xml2js");
 
 module.exports = function (publishSettings, certificate, privateKey) {
     var exp = (function () {
-       
+               
         /**
-         * Internal helper function
+         * Internal helper function to simplify requests to Windows Azure
          */
         function doAzureRequest (url, version, body, callback) {
             var method = !body ? "GET" : "POST";
@@ -36,16 +36,15 @@ module.exports = function (publishSettings, certificate, privateKey) {
                     },
                     body: body,
                     cert: certificate,
-                    key: privateKey
-                }, function (err, resp, body) {
-                    
+                    key: privateKey,
+                    agent: false // prevent keep alive. it fucks you up
+                }, function (err, resp, body) {                    
                     var onBodyParsed = function (bodyAsXml) {
                         if (resp.statusCode >= 300 && resp.statusCode < 600) {
-                            console.log("Response didn't have status in 200 range", url, resp.statusCode, body);
-                                             
+                            // console.log("Response didn't have status in 200 range", url, resp.statusCode, body);
+                                                        
                             err = {
                                 msg: "Expected resp.statusCode between 200 and 299",
-                                resp: resp,
                                 body: bodyAsXml
                             };
                         }
@@ -77,9 +76,13 @@ module.exports = function (publishSettings, certificate, privateKey) {
         /**
          * Retrieve a list of hosted services by name
          */
-        function getHostedServices(callback) {
+        function getHostedServices(slot, callback) {
             doAzureRequest("/services/hostedservices", "2011-10-01", null, function(err, obj) {
                 if (err) return callback(err);
+                
+                if (!obj.HostedService) {
+                    return callback(null, []);
+                }
                 
                 var services = normalizeArray(obj.HostedService);
                 
@@ -120,7 +123,7 @@ module.exports = function (publishSettings, certificate, privateKey) {
                 };
                 
                 services.forEach(function (svc) {
-                    getHostedServiceDeploymentInfo(svc.ServiceName, "production", function (err, depl) {
+                    getHostedServiceDeploymentInfo(svc.ServiceName, slot, function (err, depl) {
                         handleDetailedInfo(svc, err, depl);
                     });
                 });
@@ -241,8 +244,8 @@ module.exports = function (publishSettings, certificate, privateKey) {
         /**
          * Create a service if it doesn't exist yet
          */
-        function createServiceIfNotExists(service, config, callback) {
-            getHostedServices(function(err, services) {
+        function createServiceIfNotExists(service, slot, config, callback) {
+            getHostedServices(slot, function(err, services) {
                 if (err) return callback(err);
                 
                 services = services.map(function (s) { return s.name; });
@@ -342,7 +345,7 @@ module.exports = function (publishSettings, certificate, privateKey) {
         
         /**
          * Retrieve a list of all storage services
-         * Returns an error containing ServiceName and Url of the accounts
+         * Returns an callback containing ServiceName and Url of the accounts
          */
         function getStorageServices(callback) {
             doAzureRequest("/services/storageservices", "2011-10-01", null, function (err, data) {
@@ -351,6 +354,32 @@ module.exports = function (publishSettings, certificate, privateKey) {
                 var services = normalizeArray(data.StorageService);
                 
                 callback(null, services);
+            });
+        }
+        
+        /**
+         * Create a storage service
+         */
+        function createStorageService(name, callback) {
+            name = name.replace(/[^\w]+/g, "");
+            
+            var url = "/services/storageservices";
+            var data = format('<?xml version="1.0" encoding="utf-8"?>\
+<CreateStorageServiceInput xmlns="http://schemas.microsoft.com/windowsazure">\
+   <ServiceName>:0</ServiceName>\
+   <Description>:1</Description>\
+   <Label>:2</Label>\
+   <Location>North Central US</Location>\
+</CreateStorageServiceInput>', name, "Storage account created by Cloud9", new Buffer(name, "utf8").toString("base64"));
+
+            doAzureRequest(url, "2011-10-01", data, function (err, data) {
+                if (err) return callback(err);
+                
+                monitorStatus(data.RequestId, function (err) {
+                    if (err) return callback(err);
+                    
+                    callback(null, name);;
+                });
             });
         }
         
@@ -408,22 +437,6 @@ module.exports = function (publishSettings, certificate, privateKey) {
             });
         }
         
-        /**
-         * xml2js doesn't do xsd's, so the format may vary depending on the number of
-         * items in the xml message. This one normalizes arrays.
-         */
-        function normalizeArray(field) {
-            if (!field) {
-                return [];
-            }
-            else if (!(field instanceof Array)) {
-                return [ field ];
-            }
-            else {
-                return field;
-            }
-        }
-        
         var constants = {
             OS: {
                 WIN2008_SP2: 1,
@@ -444,7 +457,8 @@ module.exports = function (publishSettings, certificate, privateKey) {
             $normalizeArray: normalizeArray,
             constants: constants,
             getDatacenterLocations: getDatacenterLocations,
-            parsePublishSettings: parsePublishSettings
+            parsePublishSettings: parsePublishSettings,
+            createStorageService: createStorageService
         };
        
     }());
@@ -455,6 +469,27 @@ module.exports = function (publishSettings, certificate, privateKey) {
         _self[k] = exp[k];
     });
 };
+
+module.exports.normalizeArray = normalizeArray;
+module.exports.parsePublishSettings = parsePublishSettings;
+module.exports.getSubscriptionIds = getSubscriptionIds;
+module.exports.normalizePublishSettings = normalizePublishSettings;
+
+/**
+ * xml2js doesn't do xsd's, so the format may vary depending on the number of
+ * items in the xml message. This one normalizes arrays.
+ */
+function normalizeArray(field) {
+    if (!field) {
+        return [];
+    }
+    else if (!(field instanceof Array)) {
+        return [ field ];
+    }
+    else {
+        return field;
+    }
+}
 
 /**
  * Quickly format a string. Usage:
@@ -471,6 +506,48 @@ function format () {
 }
 
 /**
+ * Retrieve all subscription ids found in a publishSettings file
+ */
+function getSubscriptionIds (publishSettings, callback) {
+    parseXml(publishSettings, function (err, obj) {
+        if (err) return callback(err);
+        
+        if (!obj.PublishProfile || !obj.PublishProfile["@"]) {
+            return callback("This file doesn't seem to be a publish settings file");
+        }        
+        
+        callback(null, normalizeArray(obj.PublishProfile.Subscription).map(function (s) { return { id: s["@"].Id, name: s["@"].Name }; }));
+    });
+}
+
+/**
+ * So given a publishsettings file you can select one subscriptionId (if more are present)
+ */
+function normalizePublishSettings (publishSettings, subscriptionId, callback) {
+    parseXml(publishSettings, function (err, obj) {
+        if (err) return callback(err, null);
+        
+        if (!obj.PublishProfile || !obj.PublishProfile["@"]) {
+            return callback("This file doesn't seem to be a publish settings file");
+        }
+        
+        // remove all other subscriptions
+        obj.PublishProfile.Subscription = normalizeArray(obj.PublishProfile.Subscription);
+        obj.PublishProfile.Subscription.forEach(function (s, ix) {
+            if (s["@"].Id !== subscriptionId) {
+                obj.PublishProfile.Subscription.splice(ix, 1);
+            }
+        });
+        
+        js2xml(obj, null, function (xml) {
+            if (!xml) return callback("js2xml failed");
+            
+            callback(null, xml);
+        });
+    });
+}
+
+/**
  * Parse the publish settings XML and retrieve it back as a nice object
  */
 function parsePublishSettings (data, callback) {
@@ -481,10 +558,14 @@ function parsePublishSettings (data, callback) {
             return callback("This file doesn't seem to be a publish settings file");
         }
         
+        // its possible to have multiple subscriptions... we'll choose the first one
+        // you should use 'getSubscriptionIds' and 'normalizePublishSettings' beforehand
+        var subscription = normalizeArray(obj.PublishProfile.Subscription)[0];
+        
         var opts = {
             url: obj.PublishProfile["@"].Url,
             certificate: obj.PublishProfile["@"].ManagementCertificate,
-            id: obj.PublishProfile.Subscription["@"].Id
+            id: subscription["@"].Id
         };
         
         callback(null, opts);
@@ -513,6 +594,9 @@ function parseXml(data, callback) {
     parser.parseString(data);
 }
 
+/**
+ * Generate a simple UUID formatted number
+ */
 function uuid() {
     var S4 = function() {
         return (((1+Math.random())*0x10000)|0).toString(16).substring(1);
@@ -520,3 +604,68 @@ function uuid() {
     
     return (S4()+S4()+"-"+S4()+"-"+S4()+"-"+S4()+"-"+S4()+S4()+S4());
 }
+
+/**
+ * js2xml (xml2js but the other way around)
+ * from https://gist.github.com/1495793
+ */
+var js2xml = function(json, root, cb) {
+    var recursion = 0;
+    var xml = '<?xml version="1.0" ?>';
+	var isArray = function(obj) {
+		return obj && obj.constructor == Array;
+	};
+
+	var parseAttributes = function(node) {
+		for (var key in node) {
+			var value = node[key];
+			xml += ' ' + key + '="' + value + '"';
+		};
+		xml += '>';
+	};
+
+	var parseNode = function(node, parentNode) {
+		recursion++;
+		// Handle Object structures in the JSON properly
+		if (!isArray(node)) {
+			xml += '<' + parentNode;
+			if (typeof node == 'object' && node['@']) {
+				parseAttributes(node['@']);
+			}
+			else {
+				xml += '>';
+			}
+			for (var key in node) {
+				var value = node[key];
+				// text values
+				if (typeof value == 'string') {
+					if (key === '#') {
+						xml += value;
+					}
+					else {
+						xml += '<' + key + '>' + value + '</' + key + '>';
+					}
+				}
+				// is an object
+				if (typeof value == 'object' && key != '@') {
+					parseNode(node[key], key);
+				}
+			}
+			recursion--;
+			xml += '</' + parentNode + '>';
+		}
+
+		// Handle array structures in the JSON properly
+		if (isArray(node)) {
+			for (var i = 0; i < node.length; i++) {
+				parseNode(node[i], parentNode);
+			}
+			recursion--;
+		}
+
+		if (recursion === 0) {
+			cb(xml);
+		}
+	};
+	parseNode(json, root); // fire up the parser!
+};
