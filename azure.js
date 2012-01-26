@@ -89,10 +89,10 @@ else if (program.publish) {
                 
                 publish.publishPackage(pkg, program.publish, defaultConfig, function (err) {
                     if (err) {
-                        return console.log("publish error", err);
+                        console.log("publish error", err);
                     }
                     else {
-                        return console.log("publish succeeded");
+                        console.log("publish succeeded");
                     }
                     
                     publish.waitForServiceToBeStarted(program.publish, function (err, url) {
