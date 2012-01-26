@@ -15,7 +15,7 @@ function PublishHelper(azureMgt) {
     function publishPackage(pkg, service, config, callback) {
         log("creating service " + service);
     
-        azureMgt.createServiceIfNotExists(service, config, function(err) {
+        azureMgt.createServiceIfNotExists(service, "production", config, function(err) {
             if (err) {
                 return callback(err);
             }
@@ -44,32 +44,44 @@ function PublishHelper(azureMgt) {
         azureMgt.getStorageServices(function (err, svc) {
             if (err) return callback(err);
             
-            var name = svc[0].ServiceName;
-            log("using storage service", name);
-            azureMgt.getStorageCredentials(name, function (err, primaryKey) {
-                if (err) return callback(err);
-                
-                var blobService = azure.createBlobService(name, primaryKey);
-                blobService.createContainerIfNotExists('c9deploys', { publicAccessLevel : 'blob' }, function (err) {
-                    if (err) {
-                        log("BlobService error", err);
-                        return callback(err);
-                    }
-                                    
-                    var blobname = uuid.v4() + ".cspkg";
-                    log("preparing for upload '" + file + "' under blobname '" + blobname + "'");
+            var andNowToWork = function (name) {
+                log("using storage service", name);
+                azureMgt.getStorageCredentials(name, function (err, primaryKey) {
+                    if (err) return callback(err);
                     
-                    blobService.createBlockBlobFromFile("c9deploys", blobname, file, 11, function (err) {
+                    var blobService = azure.createBlobService(name, primaryKey);
+                    blobService.createContainerIfNotExists('c9deploys', { publicAccessLevel : 'blob' }, function (err) {
                         if (err) {
                             log("BlobService error", err);
                             return callback(err);
                         }
+                                        
+                        var blobname = uuid.v4() + ".cspkg";
+                        log("preparing for upload '" + file + "' under blobname '" + blobname + "'");
                         
-                        callback(null, "http://" + name + ".blob.core.windows.net/c9deploys/" + blobname);
+                        blobService.createBlockBlobFromFile("c9deploys", blobname, file, 11, function (err) {
+                            if (err) {
+                                log("BlobService error", err);
+                                return callback(err);
+                            }
+                            
+                            callback(null, "http://" + name + ".blob.core.windows.net/c9deploys/" + blobname);
+                        });
                     });
+                    
                 });
-                
-            });
+            };            
+            
+            if (!svc || !svc.length) {
+                azureMgt.createStorageService(uuid.v4().toString().substring(0, 20), function (err, name) {
+                    if (err) return callback(err);
+                    
+                    andNowToWork(name);
+                });
+            }
+            else {
+                andNowToWork(svc[0].ServiceName);
+            }
         });
     }
     
