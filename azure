@@ -16,8 +16,11 @@ program
     .option('-po, --portal', 'opens the Azure management portal')
     .option('-d, --download', 'download publish settings')
     .option('-l, --locations', 'list all datacenter locations')
+    .option('-s, --subscription [subscriptionId]', 'specify a subscription id if multiple are found in the file')
     .option('-de, --debug', 'output debug messages')
     .parse(process.argv);
+    
+console.log(program);
 
 if (program.portal) {
     argumentHandler.openPortal(function(err) {
@@ -62,7 +65,7 @@ else if (program.publish) {
                     
     getAzureMgt(function (err, azureMgt) {
         if (err) return console.log("getAzureMgt failed", err);
-        
+                
         var publish = new PublishHelper(azureMgt);
         
         console.log("creating package for './apps/" + program.publish + "'");
@@ -127,19 +130,49 @@ function getAzureMgt(callback) {
         console.log("publish settings file (.publishsettings) is required in the root of the application. To download use azure -d");
         return;
     }
+    
 
     //grab the first one
     var settingsFile = settingsFiles[0];
     console.log("using settings file:", settingsFile);
     
+    
     // read it
     var sett = fs.readFileSync(settingsFile, "ascii");
     
-    getCertAndKey(sett, function (err, cert, key) {
+    AzureMgt.getSubscriptionIds(sett, function (err, subscriptionIds) {
         if (err) return callback(err);
         
-        var azureMgt = new AzureMgt(sett, cert, key, program.debug);
-        callback(null, azureMgt);
+        if (!subscriptionIds.length) {
+            return callback("No subscriptions found");
+        }
+        
+        var _ = function () {
+            getCertAndKey(sett, function (err, cert, key) {
+                if (err) return callback(err);
+                
+                var azureMgt = new AzureMgt(sett, cert, key, program.debug);
+                callback(null, azureMgt);
+            });        
+        };
+
+        if (subscriptionIds.length > 1) {
+            if (!program.subscription) {
+                return callback("Multiple subscription ids found. Please specify one with --subscription [id]. " + JSON.stringify(subscriptionIds));
+            }
+            else {
+                AzureMgt.normalizePublishSettings(sett, program.subscription, function (err, newSett) {
+                    if (err) return callback(err);
+                    
+                    console.log("newsett", newSett);
+                    
+                    _(newSett);
+                });
+            }
+        }
+        else {
+            _(sett);
+        }
     });
 }
 
