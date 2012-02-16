@@ -1,12 +1,12 @@
-[submodule "azure-packager-node"]
-	path = azure-packager-node
+[submodule "node_modules/azure-packager-node"]
+	path = node_modules/azure-packager-node
 	url = git://github.com/c9/azure-packager-node.git
 [submodule "node_modules/azure-sdk-for-node"]
     path = node_modules/azure-sdk-for-node
     url = git://github.com/WindowsAzure/azure-sdk-for-node.git
-[submodule "azure-management"]
-	path = azure-management
+[submodule "node_modules/azure-management"]
+	path = node_modules/azure-management
 	url = git@github.com:c9/azure-management-sdk-for-node.git
-[submodule "azure-sdk-for-node"]
-	path = azure-sdk-for-node
+[submodule "node_modules/azure-sdk-for-node"]
+	path = node_modules/azure-sdk-for-node
 	url = git://github.com/c9/azure-sdk-for-node.git
