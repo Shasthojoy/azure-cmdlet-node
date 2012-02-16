@@ -1,12 +1,14 @@
-var uuid = require("node-uuid");
+var uuid = require("azure-packager-node/node_modules/node-uuid");
 var azure = require("azure-sdk-for-node");
+var fs = require("fs");
+var exec = require("child_process").exec;
 
 module.exports = PublishHelper;
 
-function PublishHelper(azureMgt) {
+function PublishHelper(azureMgt, slot) {
     
     function log () {
-        console.log.apply(this, arguments);
+        // console.log.apply(this, arguments);
     }
     
     /**
@@ -15,7 +17,7 @@ function PublishHelper(azureMgt) {
     function publishPackage(pkg, service, config, rdpCert, callback) {
         log("creating service " + service);
     
-        azureMgt.createServiceIfNotExists(service, "production", config, function(err) {
+        azureMgt.createServiceIfNotExists(service, slot, config, function(err) {
             if (err) {
                 return callback(err);
             }
@@ -29,19 +31,19 @@ function PublishHelper(azureMgt) {
                     azureMgt.monitorStatus(requestId, function (err) {
                         if (err) return callback(err);
                         
-                        _();
+                        doDeploy();
                     });
                 });
             }
             else {
-                _();
+                doDeploy();
             }
             
-            var _ = function () {
-                log("starting deployment for " + service);
+            var doDeploy = function (forceConfigUpdate) {
+                log("starting deployment for " + service + " with forceConfigUpdate", !!forceConfigUpdate);
     
-                azureMgt.createUpdateDeployment(service, "production", pkg, config, function (err, deplId) {
-                    if (err) {
+                azureMgt.createUpdateDeployment(service, slot, pkg, config, !!forceConfigUpdate, function (err, deplId) {
+                    if (err) {                
                         if (!err.resp) {
                             return callback(err);
                         }
@@ -50,7 +52,22 @@ function PublishHelper(azureMgt) {
                     }
                     
                     log("deployment started with id " + deplId);
-                    azureMgt.monitorStatus(deplId, callback);
+                    azureMgt.monitorStatus(deplId, function(err) {
+                        // if we encounter this error message. then it's due to an out of date config file. Upgrade the config and retry
+                        // we'll only do this if no forceConfigUpdate was specified, otherwise we f*cked something up ourselves so don't let it go into an endless loop.
+                        if (err && err.Error && err.Error.Message 
+                                && err.Error.Message.indexOf("One or more configuration settings defined in the service definition file are not specified in the service configuration file") > -1
+                                && !forceConfigUpdate) {
+
+                            log("Azure deployment encountered an out of date configuration file. Will force config-update.");
+                            
+                            // re-start the deploy
+                            doDeploy(true);
+                        }
+                        else {
+                            return callback(err);
+                        }
+                    });
                 });
             };
         }); 
@@ -68,25 +85,31 @@ function PublishHelper(azureMgt) {
                 azureMgt.getStorageCredentials(name, function (err, primaryKey) {
                     if (err) return callback(err);
                     
-                    var blobService = azure.createBlobService(name, primaryKey);
-                    blobService.createContainerIfNotExists('c9deploys', { publicAccessLevel : 'blob' }, function (err) {
-                        if (err) {
-                            log("BlobService error", err);
-                            return callback(err);
-                        }
-                                        
-                        var blobname = uuid.v4() + ".cspkg";
-                        log("preparing for upload '" + file + "' under blobname '" + blobname + "'");
-                        
-                        blobService.createBlockBlobFromFile("c9deploys", blobname, file, 11, function (err) {
+                    // so the Azure API is inconsistent and throws errors on precond failures and so, damn fuckers.
+                    try {
+                        var blobService = azure.createBlobService(name, primaryKey);
+                        blobService.createContainerIfNotExists('c9deploys', { publicAccessLevel : 'blob' }, function (err) {
                             if (err) {
                                 log("BlobService error", err);
                                 return callback(err);
                             }
+                                            
+                            var blobname = uuid.v4() + ".cspkg";
+                            log("preparing for upload '" + file + "' under blobname '" + blobname + "'");
                             
-                            callback(null, "http://" + name + ".blob.core.windows.net/c9deploys/" + blobname);
+                            blobService.createBlobWithBlocks("c9deploys", blobname, file, 11, function (err) {
+                                if (err) {
+                                    log("BlobService error", err);
+                                    return callback(err);
+                                }
+                                
+                                callback(null, "http://" + name + ".blob.core.windows.net/c9deploys/" + blobname);
+                            });
                         });
-                    });
+                    }
+                    catch (ex) {
+                        return callback(ex);
+                    }
                     
                 });
             };            
@@ -107,10 +130,14 @@ function PublishHelper(azureMgt) {
     function waitForServiceToBeStarted(service, onStatusChange, callback) {
         var lastServiceStatus = "";
         function checkServiceRunning () {
-            azureMgt.getHostedServiceDeploymentInfo(service, "production", function (err, depls) {
+            azureMgt.getHostedServiceDeploymentInfo(service, slot, function (err, depls) {
                 if (err) return callback(err);
                 
-                var d = depls.deploys[depls.length - 1];
+                var d = depls.deploys[depls.deploys.length - 1];
+                
+                if (!d || !d.RoleInstanceList || !d.RoleInstanceList.RoleInstance) { 
+                    return callback("VM disappeared");
+                }
                 
                 var roles = azureMgt.$normalizeArray(d.RoleInstanceList.RoleInstance);
                 var role = roles[roles.length - 1];
@@ -121,6 +148,9 @@ function PublishHelper(azureMgt) {
                 }
                 else if (role.InstanceStatus === "ReadyRole") {
                     return callback(null, d.Url);
+                }
+                else if (role.instanceStatus === "FailedStartingVM") {
+                    return callback("Starting VM failed. Please restart the VM from the Windows Azure Portal.", d.Url);
                 }
                 else {
                     if (lastServiceStatus !== role.InstanceStatus) {
@@ -134,12 +164,10 @@ function PublishHelper(azureMgt) {
         checkServiceRunning();            
     }
     
-    function getRdpSettings (username, password, prvKey, callback) {
-        var fs = require("fs");
-        var exec = require("child_process").exec;
-        
-        var root = "./certificates/" + uuid.v4();
-        
+    /**
+     * Create encrypted password and rdp settings object
+     */
+    function getRdpSettings (root, username, password, prvKey, callback) {
         // write prvkey and password to disk so we can reference em via openssl
         fs.writeFile(root + ".key", prvKey, "ascii", function (err1) {
             fs.writeFile(root + ".pwd", password, "ascii", function (err2) {
