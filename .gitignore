@@ -5,3 +5,5 @@ certificates/*
 !certificates/placeholder
 node_modules/*
 .DS_Store*
+*.publishsettings
+.settings.xml
