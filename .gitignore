@@ -3,7 +3,14 @@ build_temp/*
 !build_temp/placeholder
 certificates/*
 !certificates/placeholder
-node_modules/*
 .DS_Store*
 *.publishsettings
 .settings.xml
+node_modules/commander
+node_modules/log
+node_modules/mime
+node_modules/node-uuid
+node_modules/qs
+node_modules/request
+node_modules/xml2js
+node_modules/xmlbuilder

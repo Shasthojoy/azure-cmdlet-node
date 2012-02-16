@@ -1,5 +1,5 @@
 var uuid = require("azure-packager-node/node_modules/node-uuid");
-var azure = require("azure-sdk-for-node");
+var azure = require("azure");
 var fs = require("fs");
 var exec = require("child_process").exec;
 

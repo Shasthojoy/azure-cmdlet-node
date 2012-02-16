@@ -1,9 +1,9 @@
-[submodule "azure-packager-node"]
+[submodule "node_modules/azure-packager-node"]
 	path = node_modules/azure-packager-node
 	url = git://github.com/c9/azure-packager-node.git
-[submodule "azure-management"]
-	path = node_modules/azure-management
+[submodule "node_modules/azure-management-sdk-for-node"]
+	path = node_modules/azure-management-sdk-for-node
 	url = git@github.com:c9/azure-management-sdk-for-node.git
-[submodule "azure-sdk-for-node"]
-	path = node_modules/azure-sdk-for-node
+[submodule "node_modules/azure"]
+	path = node_modules/azure
 	url = git://github.com/c9/azure-sdk-for-node.git

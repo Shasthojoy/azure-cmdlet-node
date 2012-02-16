@@ -2,10 +2,10 @@
 
 var fs = require("fs");
 var uuid = require("node-uuid");
-var AzureMgt = require("./azure-management");
+var AzureMgt = require("azure-management-sdk-for-node");
 var PublishHelper = require("./publish-helper");
 var Path = require("path");
-var packager = require("./azure-packager-node");
+var packager = require("azure-packager-node");
 var argumentHandler = require("./argument-handler");
 var child_process = require("child_process");
 
@@ -67,7 +67,7 @@ else if (program.publish) {
     getAzureMgt(function (err, azureMgt, cert, key) {
         if (err) return console.log("getAzureMgt failed", err);
         
-        var publish = new PublishHelper(azureMgt);
+        var publish = new PublishHelper(azureMgt, "production");
         
         console.log("creating package for './apps/" + program.publish + "'");
         packager("./apps/" + program.publish, "./build_temp/" + uuid.v4(), function (err, file) {
@@ -118,7 +118,9 @@ else if (program.publish) {
                             console.log("publish succeeded");
                         }
                         
-                        publish.waitForServiceToBeStarted(program.publish, function (err, url) {
+                        publish.waitForServiceToBeStarted(program.publish, function (status) {
+                            console.log("Service status is now " + status);
+                        }, function (err, url) {
                             if (err) return console.log("waitForServiceToBeStarted failed");
                             
                             console.log("Service running and available on " + url);
