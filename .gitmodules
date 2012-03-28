@@ -3,7 +3,7 @@
 	url = git://github.com/c9/azure-packager-node.git
 [submodule "node_modules/azure-management-sdk-for-node"]
 	path = node_modules/azure-management-sdk-for-node
-	url = git@github.com:c9/azure-management-sdk-for-node.git
+	url = git://github.com/c9/azure-management-sdk-for-node.git
 [submodule "node_modules/azure"]
 	path = node_modules/azure
 	url = git://github.com/c9/azure-sdk-for-node.git
