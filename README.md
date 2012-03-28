@@ -10,6 +10,21 @@ in conjunction with Microsoft.
 
 ## Deploy a hello world app
 
+### Getting started
+
+Install [node.js](http://nodejs.org), either 0.4.12 or 0.6.x.
+Now run:
+
+```
+git clone git@github.com:c9/azure-cmdlet-node.git 
+cd azure-cmdlet-node
+git submodule update --init --recursive
+npm install
+cd node_modules/azure/
+npm install
+cd ../..
+```
+
 ### Create an application
 
 First create a folder with 'server.js' in there with the following content:
