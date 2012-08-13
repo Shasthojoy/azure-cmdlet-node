@@ -8,23 +8,21 @@ var makeTable = require("./make-table");
 program
     .option("-c, --certificate [certificateFile]", "Location of the subscription file")
     .option("-s, --subscription [subscriptionId]", "Subscription ID (required if multiple are defined in the file")
+    .option('--slot [slot]', "Deployment slot (stage or production), defaults to production")
     .option('--json', "Get the response in json")
     .parse(process.argv);
-
+    
 argumentHandler.getAzureMgt(program.certificate, program.subscription, function (err, azureMgt) {
     if (err) return console.error(err);
     
-    azureMgt.getDatacenterLocations(function (err, locs) {
+    azureMgt.getHostedServices(program.slot || "production", function (err, services) {
         if (err) return console.error(err);
         
         if (program.json) {
-            console.log(JSON.stringify(locs)); 
+            console.log(JSON.stringify(services)); 
         }
         else {
-            var data = locs.map(function (l) {
-                return { location: l };
-            });
-            console.log(makeTable(data));
+            console.log(makeTable(services));
         }
     });
 });
