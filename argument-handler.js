@@ -62,8 +62,6 @@ function getAzureMgt(settingsFile, subscriptionId, callback) {
         //grab the first one
         settingsFile = settingsFiles[0];
     }
-    console.log("using settings file:", settingsFile);
-    
     
     // read it
     var sett = fs.readFileSync(settingsFile, "ascii");
@@ -86,7 +84,7 @@ function getAzureMgt(settingsFile, subscriptionId, callback) {
 
         if (subscriptionIds.length > 1) {
             if (!subscriptionId) {
-                return callback("Multiple subscription ids found. Please specify one with --subscription [id]. " + JSON.stringify(subscriptionIds));
+                return callback("Multiple subscription ids found. Please specify one with --subscription [id].\n" + JSON.stringify(subscriptionIds));
             }
             else {
                 AzureMgt.normalizePublishSettings(sett, subscriptionId, function (err, newSett) {

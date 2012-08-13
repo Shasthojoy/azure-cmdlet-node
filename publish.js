@@ -25,11 +25,11 @@ program
     
 if (program.publish) { 
     if (program.publish === true) {
-        return console.log("error: service name is required, specify '-p servicename'");
+        return console.error("error: service name is required, specify '-p servicename'");
     }
     
     if (!program.location) {
-        return console.log("error: No application specified. Specify '-l folder'");
+        return console.error("error: No application specified. Specify '-l folder'");
     }
     
     /* // you can update the config of a deployment like this:
@@ -41,20 +41,20 @@ if (program.publish) {
     */
                     
     argumentHandler.getAzureMgt(program.certificate, program.subscription, function (err, azureMgt, cert, key) {
-        if (err) return console.log("getAzureMgt failed", err);
+        if (err) return console.error("getAzureMgt failed", err);
         
         var publish = new PublishHelper(azureMgt, program.slot || "production");
         
         console.log("[1/6] Start packaging of '" + program.location + "'");
         
         packager(program.location, "./build_temp/" + uuid.v4(), function (err, file) {
-            if (err) return console.log("Packaging failed", err);
+            if (err) return console.error("Packaging failed", err);
             
             console.log("[2/6] Packaging succeeded, uploading to Blob Storage");
             
             publish.uploadPackage(file, function (err, pkg) {
                 if (err) { 
-                    return console.log("uploadPackage failed", err);
+                    return console.error("uploadPackage failed", err);
                 }
                 
                 console.log("[3/6] Package uploaded to", pkg, "Start publishing");
@@ -70,14 +70,14 @@ if (program.publish) {
                 }
                 else {
                     if (!program.rdpuser || !program.rdppassword) {
-                        return console.log("No rdp user or password specified. Add --rdpuser [user] --rdppassword [password]");
+                        return console.error("No rdp user or password specified. Add --rdpuser [user] --rdppassword [password]");
                     }
                     rdpuser = program.rdpuser;
                     rdppassword = program.rdppassword;
                 }
                 
                 publish.getRdpSettings("./certificates/" + uuid.v4(), rdpuser, rdppassword, key, function (err, rdp, rdpCert) {
-                    if (err) return console.log("getRdpSettings failed", err);
+                    if (err) return console.error("getRdpSettings failed", err);
                     
                     rdp.enabled = !!program.rdpuser;
                     
@@ -92,7 +92,7 @@ if (program.publish) {
                     
                     publish.publishPackage(pkg, program.publish, defaultConfig, rdpCert, function (err) {
                         if (err) {
-                            console.log("publish error", err);
+                            console.error("publish error", err);
                         }
                         else {
                             console.log("[4/6] Publish succeeded. Waiting for VM.");
@@ -101,7 +101,7 @@ if (program.publish) {
                         publish.waitForServiceToBeStarted(program.publish, function (status) {
                             console.log("[5/6] Service status is now", status);
                         }, function (err, url) {
-                            if (err) return console.log("waitForServiceToBeStarted failed");
+                            if (err) return console.error("waitForServiceToBeStarted failed");
                             
                             console.log("[6/6] Service running and available on " + url);
                         });
