@@ -1,4 +1,4 @@
-#!node
+#!/usr/bin/env node
 
 var fs = require("fs");
 var uuid = require("node-uuid");

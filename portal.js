@@ -1,3 +1,4 @@
+#!/usr/bin/env node
 /**
  * Open the Azure management portal
  */

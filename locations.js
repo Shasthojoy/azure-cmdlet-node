@@ -1,3 +1,4 @@
+#!/usr/bin/env node
 /**
  * Get all data center locations
  */
