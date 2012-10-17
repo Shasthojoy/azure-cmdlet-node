@@ -55,7 +55,7 @@ function getAzureMgt(settingsFile, subscriptionId, callback) {
     
         //if not settings file was found then display an error
         if (settingsFiles.length == 0) {
-            return callback("publish settings file (.publishsettings) is required in the root of the application," +
+            return callback("publish settings file (.publishsettings) is required in the current working directory," +
                     " or has to be set manually.");
         }
         
@@ -104,7 +104,7 @@ function getAzureMgt(settingsFile, subscriptionId, callback) {
  * Extract the private key from an Azure Management Certificate
  */
 function getCertAndKey(sett, callback) {
-    var file = Path.join(process.cwd(), "/build_temp/", uuid.v4() + ".key");
+    var file = Path.join(__dirname, "/build_temp/", uuid.v4() + ".key");
     
     AzureMgt.parsePublishSettings(sett, function (err, data) {
         if (err) return callback(err);

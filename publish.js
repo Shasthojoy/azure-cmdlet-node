@@ -10,7 +10,8 @@ var argumentHandler = require("./argument-handler");
 var program = require('commander');
 
 program
-    .option('-p, --publish [serviceName]', 'publish the service')
+    .option('-h, --help', 'Usage information')
+    .option('-p, --publish [serviceName]', 'Publish the service')
     .option("-l, --location [appFolder]", "Folder where the app is located")
     .option("-c, --certificate [certificateFile]", "Location of the subscription file")
     .option("-s, --subscription [subscriptionId]", "Subscription ID (required if multiple are defined in the file")
@@ -23,13 +24,40 @@ program
     .option('--datacenter [location]', "Obtain via location.js, defaults to North America")
     .parse(process.argv);
     
-if (program.publish) { 
-    if (program.publish === true) {
-        return console.error("error: service name is required, specify '-p servicename'");
+if (program.help) {
+    console.log(program.helpInformation());
+    return;
+}
+
+var _er = console.error;
+console.error = function () {
+    _er.apply(this, arguments);
+    process.exit(1);
+};
+
+if (typeof program.publish !== "string") {
+    program.prompt("Application name: ", function (name) {
+        if (!name) {
+            return console.error("error: service name is required, specify '-p servicename'");
+        }
+        program.publish = name;
+        next();
+    });
+}
+else {
+    // continue deployment
+    next();
+}
+
+function next () {
+    // no location specified, we'll default to current working directory
+    if (!program.location) {
+        program.location = process.cwd();
     }
     
-    if (!program.location) {
-        return console.error("error: No application specified. Specify '-l folder'");
+    if (program.enablerdp && (!program.rdpuser || !program.rdppassword)) {
+        return console.error("No rdp user or password specified. " + 
+            "Add --rdpuser [user] --rdppassword [password], or run without --enablerdp.");
     }
     
     /* // you can update the config of a deployment like this:
@@ -39,7 +67,6 @@ if (program.publish) {
         });
     });
     */
-                    
     argumentHandler.getAzureMgt(program.certificate, program.subscription, function (err, azureMgt, cert, key) {
         if (err) return console.error("getAzureMgt failed", err);
         
@@ -47,7 +74,7 @@ if (program.publish) {
         
         console.log("[1/6] Start packaging of '" + program.location + "'");
         
-        packager(program.location, "./build_temp/" + uuid.v4(), function (err, file) {
+        packager(program.location, __dirname + "/build_temp/" + uuid.v4(), function (err, file) {
             if (err) return console.error("Packaging failed", err);
             
             console.log("[2/6] Packaging succeeded, uploading to Blob Storage");
@@ -69,9 +96,6 @@ if (program.publish) {
                     rdppassword = uuid.v4().substring(10);
                 }
                 else {
-                    if (!program.rdpuser || !program.rdppassword) {
-                        return console.error("No rdp user or password specified. Add --rdpuser [user] --rdppassword [password]");
-                    }
                     rdpuser = program.rdpuser;
                     rdppassword = program.rdppassword;
                 }
@@ -92,7 +116,7 @@ if (program.publish) {
                     
                     publish.publishPackage(pkg, program.publish, defaultConfig, rdpCert, function (err) {
                         if (err) {
-                            console.error("publish error", err);
+                            return console.error("publish error", err);
                         }
                         else {
                             console.log("[4/6] Publish succeeded. Waiting for VM.");
@@ -110,7 +134,4 @@ if (program.publish) {
             });
         });    
     });
-}
-else {
-    console.log(program.helpInformation());
-}
+};
